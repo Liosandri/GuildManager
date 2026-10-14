@@ -1,10 +1,10 @@
 // ===== À MODIFIER : réglages du site =====
 window.GUILD_CONFIG = {
   // Adresse de l'application web Apps Script (se termine par /exec). Voir LISEZMOI.md, étape 6.
-  API_URL: 'https://script.google.com/macros/s/AKfycbyXREULFF3ynnORjGLfK-qmrEGitIBzlIVaomMy9b3ByYVsPvu66GVdi-SZt6NZw9VEfw/exec',
+  API_URL: 'REMPLACER_PAR_ADRESSE_APPS_SCRIPT',
 
   // Nom affiché en haut du site
-  NAME: 'SIGMA',
+  NAME: 'Ma guilde',
 
   // Soirées de raid (day : 0 = dimanche, 1 = lundi, ... 3 = mercredi, 6 = samedi)
   SCHEDULE: [
