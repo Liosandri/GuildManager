@@ -200,3 +200,5 @@ body.locked .overlay { background: #0a1424; }
 .hero .banner { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--gold); box-shadow: 0 8px 30px rgba(0,0,0,.45); margin-bottom: 10px; }
 .hero { padding-top: 14px; }
 .card.next { flex-wrap: wrap; gap: 10px; } .card.next .grow { min-width: 200px; }
+.crest-img { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--gold); box-shadow: 0 0 8px rgba(217,180,90,.35); object-fit: cover; display: block; }
+.brand { display: inline-flex; align-items: center; gap: 9px; }

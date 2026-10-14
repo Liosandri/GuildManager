@@ -154,7 +154,7 @@ const G = (() => {
     const el = document.getElementById('nav');
     if (!el) return;
     el.className = 'nav';
-    el.innerHTML = '<div class="nav-in"><a class="brand" href="index.html"><span class="crest">🦁</span>' + esc(cfg.NAME || 'Guilde') + '</a>' +
+    el.innerHTML = '<div class="nav-in"><a class="brand" href="index.html"><img class="crest-img" src="assets/lion.png" alt="" width="34" height="34">' + esc(cfg.NAME || 'Guilde') + '</a>' +
       '<nav class="links">' + PAGES.map(p => '<a href="' + p[0] + '" class="' + (p[0] === active ? 'on' : '') + '"><span class="ic">' + p[1] + '</span> ' + p[2] + '</a>').join('') + '</nav>' +
       '<div class="me">' + (isOfficer() ? '<button class="btn small" id="me-out" title="Se déconnecter">🔓 Quitter</button>' : '') + '</div></div>';
     const out = el.querySelector('#me-out'), inn = el.querySelector('#me-in');
