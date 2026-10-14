@@ -483,7 +483,10 @@ async function openClose() {
 }
 // envoi immédiat, en attendant le résultat (utilisé avant la clôture)
 async function flushNow() {
-  await G.post('eventSave', { id: S.ev.id, participants: S.parts.map(clean) });
+  for (let i = 0; ; i++) {
+    try { await G.post('eventSave', { id: S.ev.id, participants: S.parts.map(clean) }); break; }
+    catch (e) { if (i >= 2 || !/occup|verrouill/i.test(G.errMsg(e))) throw e; await new Promise(r => setTimeout(r, 3000)); }
+  }
   S.dirty = false; try { localStorage.removeItem('gev:' + S.ev.id); } catch (e) {} setSync('ok');
 }
 
