@@ -1,6 +1,12 @@
 /* Code commun à toutes les pages du site */
 const G = (() => {
-  const cfg = window.GUILD_CONFIG || {};
+  const cfg = Object.assign({}, window.GUILD_CONFIG || {});
+  // Mémorise les réglages valides : si le navigateur reçoit un jour une ancienne copie de config.js
+  // (cache de GitHub Pages), le site continue de fonctionner avec les derniers bons réglages.
+  try {
+    if (cfg.API_URL && !/REMPLACER/.test(cfg.API_URL)) localStorage.setItem('gcfg', JSON.stringify(cfg));
+    else { const old = JSON.parse(localStorage.getItem('gcfg') || 'null'); if (old && old.API_URL) Object.assign(cfg, old); }
+  } catch (e) { /* pas de stockage : tant pis */ }
   const ROLE = {
     tank: { emoji: '🛡️', name: 'Tanks', one: 'Tank' },
     soigneur: { emoji: '💚', name: 'Soigneurs', one: 'Soigneur' },
