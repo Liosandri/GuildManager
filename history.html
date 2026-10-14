@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Historique · Guilde</title>
+<meta name="theme-color" content="#0a1424">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header id="nav"></header>
+<main class="wrap" id="app"></main>
+<script src="config.js"></script>
+<script src="assets/app.js"></script>
+<script>
+
+const app = document.getElementById('app');
+const E = G.esc;
+G.nav('history.html');
+let groups = null; const openG = {};
+app.innerHTML = '<div class="pagehead"><div><h1>📜 Historique</h1><p class="muted small">Chaque raid clôturé : SR et HR obtenus, points gagnés, loots, retards. Visible par toute la guilde.</p></div>' +
+  '<button class="btn small" id="reload">↻ Actualiser</button></div><div id="list"><p class="muted">Chargement…</p></div>';
+document.getElementById('reload').onclick = () => load(true);
+function paint() {
+  const el = document.getElementById('list');
+  if (!groups) return;
+  el.innerHTML = groups.length ? groups.map((g, i) => G.groupHtml(g, i, !!openG[i])).join('') : '<div class="empty">Aucun mouvement pour le moment.</div>';
+  el.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { openG[b.dataset.g] = !openG[b.dataset.g]; paint(); });
+}
+async function load(force) {
+  try {
+    if (force) { try { localStorage.removeItem('g:hist'); } catch (e) {} }
+    await G.swr('hist', () => G.get('history'), d => { groups = d.groups; paint(); });
+  } catch (e) { document.getElementById('list').innerHTML = '<div class="banner">' + E(G.errMsg(e)) + '</div>'; }
+}
+load();
+</script>
+</body>
+</html>

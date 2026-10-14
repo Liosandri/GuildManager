@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accueil · Guilde</title>
+<meta name="theme-color" content="#0a1424">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header id="nav"></header>
+<main class="wrap" id="app"></main>
+<script src="config.js"></script>
+<script src="assets/app.js"></script>
+<script>
+
+const app = document.getElementById('app');
+const E = G.esc;
+G.nav('index.html');
+const cfg = G.cfg;
+let pub = null, hist = null;
+
+app.innerHTML =
+  '<div class="hero"><div class="crest">🦁</div><h1>' + E(cfg.NAME || 'Guilde') + '</h1><p class="muted">Portail de guilde · roster, raids, points de SR</p></div>' +
+  '<div id="next"></div>' +
+  '<div class="tiles">' +
+  '<a class="tile" href="roster.html"><div class="ico">👥</div><h3>Roster & membres</h3><div class="stat" id="s-roster">…</div></a>' +
+  '<a class="tile" href="events.html"><div class="ico">⚔️</div><h3>Événements</h3><div class="stat" id="s-events">…</div></a>' +
+  '<a class="tile" href="ranking.html"><div class="ico">🎯</div><h3>Classement SR</h3><div class="stat" id="s-rank">…</div></a>' +
+  '<a class="tile" href="history.html"><div class="ico">📜</div><h3>Historique</h3><div class="stat" id="s-hist">…</div></a></div>' +
+  '<div class="two"><div class="card"><h3>🏆 En tête du classement</h3><div id="top" style="margin-top:6px"><span class="muted">Chargement…</span></div></div>' +
+  '<div class="card"><h3>📜 Dernier raid</h3><div id="last" style="margin-top:6px"><span class="muted">Chargement…</span></div></div></div>' +
+  '<div id="warn"></div>';
+
+function nextCard() {
+  const nx = G.nextRaid();
+  const open = pub && pub.raids.find(r => r.status === 'En cours');
+  let html = '';
+  if (nx) {
+    const day = nx.today ? (nx.live ? 'Ce soir · en cours' : 'Ce soir') : nx.label + ' ' + G.fmtDay(G.isoDay(nx.start));
+    html += '<div class="when">' + E(day) + ' · ' + E(nx.time) + '</div><div class="muted">Prochain raid · ' + E(nx.name) + ' (premier pull ' + E(nx.time) + ')</div>';
+  } else html += '<div class="muted">Aucun raid planifié (voir config.js).</div>';
+  const link = open
+    ? '<a class="btn on" href="events.html#/' + E(open.id) + '">Ouvrir « ' + E(open.name) + ' » (en cours)</a>'
+    : '<a class="btn" href="events.html">Créer l\'événement</a>';
+  document.getElementById('next').innerHTML = '<div class="card next"><div class="grow">' + html + '</div>' + (G.isOfficer() ? link : '') + '</div>';
+}
+
+function paintPub() {
+  if (!pub) return;
+  const m = pub.members, n = r => m.filter(x => x.role === r).length;
+  document.getElementById('s-roster').textContent = m.length + ' membre' + (m.length > 1 ? 's' : '') + ' · 🛡️ ' + n('tank') + ' · 💚 ' + n('soigneur') + ' · ⚔️ ' + n('dps');
+  const open = pub.raids.find(r => r.status === 'En cours'), closed = pub.raids.filter(r => r.status !== 'En cours');
+  document.getElementById('s-events').textContent = open ? 'En cours : ' + open.name : closed.length ? 'Dernier : ' + closed[0].name + ' (' + G.fmtDay(closed[0].date) + ')' : 'Aucun raid';
+  const top = m.slice().sort((a, b) => b.points - a.points);
+  document.getElementById('s-rank').textContent = top.length && top[0].points ? 'N°1 : ' + top[0].key + ' · ' + top[0].points + ' pts' : 'Pas encore de points';
+  document.getElementById('top').innerHTML = top.slice(0, 5).map((x, i) =>
+    '<div class="mini"><span>' + ['🥇', '🥈', '🥉', '4.', '5.'][i] + ' <b style="color:' + G.classColor(x.classe) + '">' + E(x.key) + '</b></span><span class="gold"><b>' + x.points + '</b> pts' + (x.hr ? ' · 🎯' + x.hr : '') + '</span></div>').join('') || '<span class="muted">Aucun membre.</span>';
+  nextCard();
+}
+function paintHist() {
+  if (!hist) return;
+  const g = hist.groups.find(x => x.kind === 'raid');
+  document.getElementById('s-hist').textContent = g ? g.name + ' · ' + G.fmtDay(g.date) : 'Aucun mouvement';
+  document.getElementById('last').innerHTML = g ? '<b>' + E(g.name) + '</b> <span class="muted small">' + G.fmtDay(g.date) + ' · ' + g.count + ' joueurs</span>' +
+    (g.sr.length ? '<div class="mini"><span>🎯 SR obtenu</span><span>' + E(g.sr.join(', ')) + '</span></div>' : '') +
+    (g.hrEarned.length ? '<div class="mini"><span>🌟 HR gagnée</span><span>' + E(g.hrEarned.join(', ')) + '</span></div>' : '') +
+    (g.loot.length ? '<div class="mini"><span>🎁 Loot hors SR</span><span>' + E(g.loot.map(l => l.key + ' ×' + l.n).join(', ')) + '</span></div>' : '') +
+    '<div class="mini"><span>📈 +' + (g.bonusValue || 10) + ' points</span><span>' + g.bonus.length + ' joueur' + (g.bonus.length > 1 ? 's' : '') + '</span></div>' : '<span class="muted">Aucun raid clôturé pour le moment.</span>';
+}
+nextCard();
+const fail = e => { document.getElementById('warn').innerHTML = '<div class="banner">' + E(G.errMsg(e)) + '</div>'; };
+G.swr('pub', () => G.get('public'), d => { pub = d; paintPub(); }).catch(fail);
+G.swr('hist', () => G.get('history'), d => { hist = d; paintHist(); }).catch(() => {});
+</script>
+</body>
+</html>

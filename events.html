@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Événements · Guilde</title>
+<meta name="theme-color" content="#0a1424">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header id="nav"></header>
+<main class="wrap" id="app"></main>
+<div id="actbar" class="actbar hidden"></div>
+<script src="config.js"></script>
+<script src="assets/app.js"></script>
+<script>
+/* ============ Événements : liste + gestion d'un raid ============ */
+const app = document.getElementById('app');
+const bar = document.getElementById('actbar');
+const E = G.esc;
+const S = {
+  rules: { bonus: 10, penalty: 1, noshowPenalty: 10, threshold: 100, hrResetsPoints: true, inactiveDays: 28 },
+  members: [], byKey: {}, externals: [], catalog: {}, raids: [],
+  ev: null, parts: [], sel: null, q: '', filter: 'all', dense: null,
+  dirty: false, version: 0, saving: false, retry: null, stopped: false, sync: 'ok', syncMsg: '',
+};
+
+G.nav('events.html');
+function evMode(on) { document.body.classList.toggle('ev-mode', on); }
+
+/* ---------- démarrage ---------- */
+async function boot() {
+  route();
+}
+window.addEventListener('hashchange', route);
+window.addEventListener('beforeunload', ev => { if (S.dirty) { ev.preventDefault(); ev.returnValue = ''; } });
+
+function route() {
+  const id = decodeURIComponent((location.hash || '').replace(/^#\/?/, ''));
+  if (id) openEvent(id); else showList();
+}
+
+/* ---------- liste des événements ---------- */
+async function showList() {
+  stopEvent(); evMode(false);
+  bar.classList.add('hidden');
+  const nx = G.nextRaid();
+  const defName = nx ? nx.name : 'Raid';
+  const defDate = nx ? G.isoDay(nx.start) : G.todayIso();
+  app.innerHTML =
+    '<div class="pagehead"><div><h1>⚔️ Événements</h1><p class="muted small">Crée un raid, ajoute les présents, note les loots, puis clôture.</p></div></div>' +
+    '<div class="card"><b>Nouveau raid</b>' +
+    '<div class="row" style="margin-top:10px;flex-wrap:wrap"><input id="nr-name" class="grow" style="min-width:180px" value="' + E(defName) + '" placeholder="Nom du raid">' +
+    '<input id="nr-date" type="date" value="' + defDate + '" style="width:160px"></div>' +
+    '<button class="btn on" id="nr-go" style="width:100%;margin-top:10px">Créer le raid</button></div>' +
+    '<h2>Raids</h2><div id="list"><p class="muted">Chargement…</p></div>';
+  document.getElementById('nr-go').onclick = createEvent;
+  try {
+    await G.swr('raids', () => G.get('public').then(d => d.raids), raids => { S.raids = raids; renderList(); });
+  } catch (e) { document.getElementById('list').innerHTML = '<p class="err">' + E(G.errMsg(e)) + '</p>'; }
+}
+
+function renderList() {
+  const el = document.getElementById('list');
+  if (!el) return;
+  el.innerHTML = S.raids.length ? S.raids.map(r =>
+    '<div class="card"><div class="row"><div class="grow"><b>' + E(r.name) + '</b> <span class="tag ' + (r.status === 'En cours' ? 'open' : '') + '">' + E(r.status) + '</span>' +
+    '<div class="muted small">' + G.fmtDay(r.date) + ' · ' + r.count + ' joueur' + (r.count > 1 ? 's' : '') + (r.closedAt ? ' · clôturé le ' + G.fmtDay(r.closedAt) : '') + '</div></div>' +
+    '<a class="btn small on" href="#/' + E(r.id) + '" style="display:inline-flex;align-items:center">' + (r.status === 'En cours' ? 'Gérer' : 'Voir') + '</a>' +
+    '<button class="btn small" data-del="' + E(r.id) + '" title="Supprimer" aria-label="Supprimer">🗑</button></div></div>').join('')
+    : '<div class="empty">Aucun raid pour le moment.</div>';
+  el.querySelectorAll('[data-del]').forEach(b => b.onclick = () => askDelete(b.dataset.del));
+}
+
+async function createEvent() {
+  const btn = document.getElementById('nr-go');
+  btn.disabled = true;
+  try {
+    const r = await G.post('eventCreate', { name: document.getElementById('nr-name').value, date: document.getElementById('nr-date').value });
+    S.raids = r.raids;
+    location.hash = '#/' + r.event.id;
+  } catch (e) { G.toast(G.errMsg(e), true); btn.disabled = false; }
+}
+
+function askDelete(id) {
+  const r = S.raids.find(x => x.id === id);
+  if (!r) return;
+  const m = G.modal('<h2 style="margin-top:0">Supprimer ce raid ?</h2>' +
+    '<p><b>' + E(r.name) + '</b> · ' + G.fmtDay(r.date) + ' · ' + E(r.status) + '</p>' +
+    '<p class="muted small">Le raid et sa liste de présents sont supprimés. Les points déjà attribués et l\'historique sont conservés.' +
+    (r.status === 'En cours' ? ' <b class="gold">Ce raid n\'est pas clôturé : aucun point ne sera attribué.</b>' : '') + '</p>' +
+    '<div class="row"><button class="btn grow" id="d-no">Annuler</button><button class="btn on bad grow" id="d-ok">Supprimer</button></div>');
+  m.querySelector('#d-no').onclick = G.closeModal;
+  m.querySelector('#d-ok').onclick = async () => {
+    m.querySelector('#d-ok').disabled = true;
+    try {
+      const res = await G.post('eventDelete', { id });
+      S.raids = res.raids; try { localStorage.removeItem('gev:' + id); } catch (e) {}
+      G.closeModal(); renderList(); G.toast('Raid supprimé');
+    } catch (e) { G.toast(G.errMsg(e), true); m.querySelector('#d-ok').disabled = false; }
+  };
+}
+
+/* ---------- un raid ---------- */
+function stopEvent() {
+  clearTimeout(S.retry); S.retry = null;
+  S.ev = null; S.parts = []; S.sel = null; S.dirty = false; S.stopped = false;
+  document.removeEventListener('keydown', onKey);
+}
+
+const isOpen = () => S.ev && S.ev.status === 'En cours';
+const clean = p => ({ key: p.key, externe: !!p.externe, classe: p.classe || '', loot: p.loot || 0, sr: !!p.sr, hr: !!p.hr, status: p.status || 'present' });
+
+async function openEvent(id) {
+  stopEvent(); evMode(true);
+  app.innerHTML = '<p class="muted" style="margin-top:30px">Chargement du raid…</p>';
+  try {
+    const d = await G.post('eventGet', { id });
+    S.ev = d.event; S.parts = d.participants.map(clean);
+    S.rules = d.rules; S.members = d.members; S.externals = d.externals; S.catalog = d.catalog;
+    S.byKey = {}; d.members.forEach(m => { S.byKey[m.key] = m; });
+    S.sel = null; S.q = ''; S.filter = 'all';
+    const pref = (() => { try { return localStorage.getItem('g:dense'); } catch (e) { return null; } })();
+    S.dense = pref === null ? S.parts.length >= 16 : pref === '1';
+    // modifications non envoyées lors d'une visite précédente ?
+    if (isOpen()) {
+      try {
+        const raw = localStorage.getItem('gev:' + id);
+        if (raw) { const b = JSON.parse(raw); if (b && b.dirty && Array.isArray(b.parts)) { S.parts = b.parts; S.dirty = true; G.toast('Modifications non envoyées récupérées.'); setTimeout(flush, 400); } }
+      } catch (e) {}
+    }
+    renderEvent();
+    document.addEventListener('keydown', onKey);
+  } catch (e) {
+    app.innerHTML = '<div class="card" style="margin-top:30px"><p class="err">' + E(G.errMsg(e)) + '</p><a class="btn" href="#">← Retour aux raids</a></div>';
+  }
+}
+
+/* sauvegarde en lot (une seule requête, quelques secondes après la dernière action) */
+function touch() {
+  S.version++; S.dirty = true;
+  try { localStorage.setItem('gev:' + S.ev.id, JSON.stringify({ dirty: true, parts: S.parts })); } catch (e) {}
+  setSync('wait');
+  clearTimeout(S.retry); S.retry = setTimeout(flush, 1200);
+}
+async function flush() {
+  clearTimeout(S.retry); S.retry = null;
+  if (!S.dirty || S.saving || S.stopped || !S.ev) return;
+  S.saving = true;
+  const v = S.version;
+  setSync('wait');
+  try {
+    await G.post('eventSave', { id: S.ev.id, participants: S.parts.map(clean) });
+    if (S.version === v) { S.dirty = false; try { localStorage.removeItem('gev:' + S.ev.id); } catch (e) {} setSync('ok'); }
+  } catch (e) {
+    const msg = G.errMsg(e);
+    if (/clos|introuvable/i.test(msg)) { S.stopped = true; setSync('bad', msg); }
+    else { setSync('bad', 'Non envoyé, nouvelle tentative…'); S.retry = setTimeout(flush, 5000); }
+  } finally {
+    S.saving = false;
+    if (S.dirty && !S.stopped && !S.retry) S.retry = setTimeout(flush, 300);
+  }
+}
+function setSync(state, msg) {
+  S.sync = state; S.syncMsg = msg || '';
+  const el = document.getElementById('sync');
+  if (!el) return;
+  el.className = 'sync ' + state;
+  el.textContent = state === 'ok' ? '✓' : state === 'wait' ? '…' : '⚠ ' + (msg || 'Non envoyé'); el.title = state === 'ok' ? 'Enregistré' : state === 'wait' ? 'Envoi en cours' : (msg || '');
+}
+
+/* ---------- affichage ---------- */
+const ROLE_ORDER = ['tank', 'soigneur', 'dps', 'ext', 'other'];
+function groupOf(p) { if (p.externe) return 'ext'; const m = S.byKey[p.key]; return m && ROLE_ORDER.indexOf(m.role) !== -1 ? m.role : 'other'; }
+function sortedParts() {
+  return S.parts.slice().sort((a, b) => ROLE_ORDER.indexOf(groupOf(a)) - ROLE_ORDER.indexOf(groupOf(b)) || a.key.localeCompare(b.key));
+}
+function classOf(p) { const m = S.byKey[p.key]; if (m) return m.classe; if (p.externe) { const x = S.externals.find(e => e.name === p.key); return (x && x.classe) || p.classe || ''; } return ''; }
+
+function renderEvent() {
+  const open = isOpen();
+  const raid = S.ev;
+  app.innerHTML =
+    '<div class="' + (S.dense ? 'dense' : '') + '" id="evroot">' +
+    '<div class="evbar"><div class="row t"><a class="btn small" href="#" aria-label="Retour">←</a>' +
+    '<div class="grow" style="min-width:0"><div class="rname" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + E(raid.name) + (open ? '' : ' <span class="tag">' + E(raid.status) + '</span>') + '</div>' +
+    '<div class="muted small sub">' + G.fmtDay(raid.date) + (open ? ' · en cours' : '') + '</div></div>' +
+    (open ? '<button class="btn small on" id="b-add">＋ Joueurs</button><button class="btn small" id="b-close">Clôturer</button>' : '') + '</div>' +
+    '<div class="evtools"><input id="q" placeholder="Chercher un joueur…" autocomplete="off" value="' + E(S.q) + '">' +
+    '<button class="btn small" id="b-dense" title="Taille des cases">' + (S.dense ? '▦' : '▤') + '</button></div>' +
+    '<div class="chips" id="filters"></div>' +
+    '<div class="muted small" style="margin-top:4px"><span id="stats"></span>' + (open ? ' <span id="sync" class="sync ok">✓</span>' : '') + '</div></div>' +
+    (open ? '' : '<div class="banner" style="margin-top:10px">Raid clôturé le ' + G.fmtDay(raid.closedAt) + ' : lecture seule.</div>') +
+    '<div id="grid" class="evgrid" style="margin-top:10px"></div></div>';
+  if (open) {
+    document.getElementById('b-add').onclick = openPicker;
+    document.getElementById('b-close').onclick = openClose;
+  }
+  document.getElementById('b-dense').onclick = () => {
+    S.dense = !S.dense; try { localStorage.setItem('g:dense', S.dense ? '1' : '0'); } catch (e) {}
+    renderEvent();
+  };
+  const q = document.getElementById('q');
+  q.oninput = () => {
+    S.q = q.value; renderGrid();
+    const vis = visibleParts();
+    if (S.q && vis.length === 1) select(vis[0].key, true);
+  };
+  setSync(S.sync, S.syncMsg);
+  renderFilters(); renderGrid(); renderBar();
+}
+
+function visibleParts() {
+  const q = G.norm(S.q);
+  return sortedParts().filter(p => {
+    if (S.filter !== 'all' && groupOf(p) !== S.filter) return false;
+    return !q || G.norm(p.key + ' ' + classOf(p)).indexOf(q) !== -1;
+  });
+}
+
+function renderFilters() {
+  const n = g => S.parts.filter(p => groupOf(p) === g).length;
+  const f = [['all', 'Tous ' + S.parts.length]];
+  ['tank', 'soigneur', 'dps'].forEach(r => f.push([r, G.ROLE[r].emoji + ' ' + n(r)]));
+  if (n('ext')) f.push(['ext', '👤 ' + n('ext')]);
+  if (n('other')) f.push(['other', '❓ ' + n('other')]);
+  document.getElementById('filters').innerHTML = f.map(x => '<button class="chip' + (S.filter === x[0] ? ' on' : '') + '" data-f="' + x[0] + '">' + x[1] + '</button>').join('');
+  document.querySelectorAll('#filters [data-f]').forEach(b => b.onclick = () => { S.filter = b.dataset.f; renderFilters(); renderGrid(); });
+}
+
+function projection(p) {
+  const m = S.byKey[p.key];
+  if (p.externe || !m) return null;
+  return G.outcome(S.rules, { points: m.points, hr: m.hr, hors: m.hors }, p);
+}
+
+function tileHtml(p) {
+  const m = S.byKey[p.key];
+  const pr = projection(p);
+  const sub = p.externe ? '<span>Externe</span>'
+    : pr ? '<span>' + m.points + ' pts</span>' : '';
+  const bd = (p.loot ? '<span class="l">+' + p.loot + '</span>' : '') + (p.sr ? '<span class="g">SR</span>' : '') + (p.hr ? '<span class="g">HR</span>' : '') +
+    (p.status === 'retard' ? '<span>⏰</span>' : p.status === 'noshow' ? '<span>❌</span>' : '');
+  return '<button class="pt ' + p.status + (S.sel === p.key ? ' sel' : '') + '" data-k="' + E(p.key) + '" style="--c:' + G.classColor(classOf(p)) + '">' +
+    '<span class="n">' + E(p.key) + '</span><span class="s">' + sub + '<span class="bd">' + bd + '</span></span></button>';
+}
+
+function renderGrid() {
+  const list = visibleParts();
+  const el = document.getElementById('grid');
+  el.innerHTML = list.length ? list.map(tileHtml).join('')
+    : '<div class="empty" style="grid-column:1/-1">' + (S.parts.length ? 'Aucun résultat.' : (isOpen() ? 'Touche « ＋ Joueurs » pour ajouter les présents.' : 'Aucun participant.')) + '</div>';
+  el.querySelectorAll('.pt').forEach(b => b.onclick = () => select(b.dataset.k));
+  const sr = S.parts.filter(p => p.sr).length, hr = S.parts.filter(p => p.hr).length, lt = S.parts.reduce((a, p) => a + (p.loot || 0), 0);
+  const st = document.getElementById('stats');
+  if (st) st.textContent = S.parts.length + ' joueurs · SR ' + sr + ' · HR ' + hr + ' · +1: ' + lt;
+}
+
+function refreshTile(key) {
+  const p = S.parts.find(x => x.key === key);
+  const old = document.querySelector('.pt[data-k="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
+  if (!p || !old) { renderGrid(); return; }
+  const tmp = document.createElement('div'); tmp.innerHTML = tileHtml(p);
+  const neu = tmp.firstChild; neu.onclick = () => select(key);
+  old.replaceWith(neu);
+  const sr = S.parts.filter(x => x.sr).length, hr = S.parts.filter(x => x.hr).length, lt = S.parts.reduce((a, x) => a + (x.loot || 0), 0);
+  const st = document.getElementById('stats');
+  if (st) st.textContent = S.parts.length + ' joueurs · SR ' + sr + ' · HR ' + hr + ' · +1: ' + lt;
+}
+
+function select(key, scroll) {
+  S.sel = S.sel === key && !scroll ? null : key;
+  document.querySelectorAll('.pt.sel').forEach(e => e.classList.remove('sel'));
+  if (S.sel) {
+    const el = document.querySelector('.pt[data-k="' + (window.CSS && CSS.escape ? CSS.escape(S.sel) : S.sel) + '"]');
+    if (el) { el.classList.add('sel'); if (scroll) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  }
+  renderBar();
+}
+
+/* ---------- barre d'action ---------- */
+function renderBar() {
+  if (!isOpen()) { bar.classList.add('hidden'); return; }
+  bar.classList.remove('hidden');
+  const p = S.parts.find(x => x.key === S.sel);
+  if (!p) { bar.innerHTML = '<div class="actbar-in"><div class="hint">Touche un joueur, puis +1 / SR / HR</div></div>'; return; }
+  const m = S.byKey[p.key], pr = projection(p), noshow = p.status === 'noshow';
+  const off = noshow ? ' disabled' : '';
+  const info = p.externe ? '<span class="muted small">Externe · aucun point</span>'
+    : pr ? '<span class="muted small">' + E(m.classe) + ' · ' + '<b class="gold">' + m.points + '</b> pts</span>' : '';
+  bar.innerHTML = '<div class="actbar-in"><div class="who"><b style="color:' + G.classColor(classOf(p)) + '">' + E(p.key) + '</b>' + info + '</div>' +
+    '<div class="actrow"><div class="acts">' +
+    '<button class="a loot" data-a="loot+"' + off + '>+1' + (p.loot ? ' · ' + p.loot : '') + '</button>' +
+    '<button class="a" data-a="loot-"' + (p.loot ? '' : ' disabled') + '>−1</button>' +
+    (p.externe ? '<span></span><span></span>' :
+      '<button class="a good' + (p.sr ? ' on' : '') + '" data-a="sr"' + off + '>SR</button><button class="a good' + (p.hr ? ' on' : '') + '" data-a="hr"' + off + '>HR</button>') +
+    '</div><div class="acts2">' +
+    (p.externe ? '<span></span><span></span>' :
+      '<button class="a warn' + (p.status === 'retard' ? ' on' : '') + '" data-a="retard">Retard</button><button class="a bad' + (noshow ? ' on' : '') + '" data-a="noshow">No-show</button>') +
+    '<button class="a" data-a="remove">Retirer</button></div></div></div>';
+  bar.querySelectorAll('[data-a]').forEach(b => b.onclick = () => act(b.dataset.a));
+}
+
+function act(a) {
+  const p = S.parts.find(x => x.key === S.sel);
+  if (!p || !isOpen()) return;
+  if (a === 'loot+') p.loot = Math.min(99, (p.loot || 0) + 1);
+  else if (a === 'loot-') p.loot = Math.max(0, (p.loot || 0) - 1);
+  else if (a === 'sr') p.sr = !p.sr;
+  else if (a === 'hr') p.hr = !p.hr;
+  else if (a === 'retard') p.status = p.status === 'retard' ? 'present' : 'retard';
+  else if (a === 'noshow') { p.status = p.status === 'noshow' ? 'present' : 'noshow'; if (p.status === 'noshow') { p.sr = false; p.hr = false; p.loot = 0; } }
+  else if (a === 'remove') {
+    S.parts = S.parts.filter(x => x.key !== p.key); S.sel = null;
+    touch(); renderFilters(); renderGrid(); renderBar(); return;
+  }
+  touch(); refreshTile(p.key); renderBar();
+}
+
+function onKey(ev) {
+  if (!isOpen() || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if (document.getElementById('g-overlay')) return;
+  const t = ev.target && ev.target.tagName;
+  if (t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA') return;
+  const list = visibleParts().map(p => p.key);
+  const i = list.indexOf(S.sel);
+  const cols = (() => { const tiles = [...document.querySelectorAll('.pt')]; if (tiles.length < 2) return 1; const top = tiles[0].offsetTop; let c = 0; while (c < tiles.length && tiles[c].offsetTop === top) c++; return Math.max(c, 1); })();
+  const move = d => { if (!list.length) return; const n = i < 0 ? 0 : Math.max(0, Math.min(list.length - 1, i + d)); select(list[n], true); ev.preventDefault(); };
+  const k = ev.key.toLowerCase();
+  if (ev.key === 'ArrowRight') move(1); else if (ev.key === 'ArrowLeft') move(-1);
+  else if (ev.key === 'ArrowDown') move(cols); else if (ev.key === 'ArrowUp') move(-cols);
+  else if (!S.sel) return;
+  else if (k === '+' || k === 'l' || k === '=') act('loot+');
+  else if (k === '-') act('loot-');
+  else if (k === 's') act('sr');
+  else if (k === 'h') act('hr');
+  else if (k === 'r') act('retard');
+  else if (k === 'n') act('noshow');
+  else if (ev.key === 'Escape') select(S.sel);
+}
+
+/* ---------- sélecteur de joueurs ---------- */
+const PK = { q: '', role: 'all', sel: {}, selExt: {}, newExt: [] };
+const isTit = m => G.statutNorm(m) === 'titulaire';
+function pkExt() {
+  const out = S.externals.slice(), have = {};
+  out.forEach(x => { have[x.name.toLowerCase()] = true; });
+  PK.newExt.forEach(x => { if (!have[x.name.toLowerCase()]) out.unshift({ name: x.name, classe: x.classe, raids: 0, last: '', isNew: true }); });
+  return out;
+}
+function pkCard(m, inRaid) {
+  const tag = G.statutNorm(m) === 'essai' ? 'Essai' : G.statutNorm(m) === 'remplacant' ? 'Remplaçant' : '';
+  const os = m.spe2 ? 'OS : ' + m.spe2 + (m.role2 ? ' ' + G.ROLE[m.role2].emoji : '') : '';
+  return '<button class="pk-card' + (PK.sel[m.key] ? ' sel' : '') + (inRaid ? ' in' : '') + '" data-pk="card" data-key="' + E(m.key) + '"' + (inRaid ? ' disabled' : '') + ' style="--c:' + G.classColor(m.classe) + '">' +
+    '<span class="pk-check">✓</span><span class="pk-name">' + E(m.key) + '</span>' +
+    '<span class="pk-cls">' + E([m.classe, m.spe].filter(Boolean).join(' ')) + ' ' + (G.ROLE[m.role] ? G.ROLE[m.role].emoji : '') + '</span>' +
+    '<span class="pk-meta"><span class="pk-pts">' + m.points + ' pts</span>' + (m.hr ? '<span>🎯 HR ' + m.hr + '</span>' : '') +
+    (inRaid ? '<span>Déjà au raid</span>' : '') + (tag ? '<span class="tag">' + tag + '</span>' : '') + (os && !inRaid ? '<span>' + E(os) + '</span>' : '') + '</span></button>';
+}
+function pkExtCard(x, inRaid) {
+  const meta = x.isNew ? 'Nouveau' : x.raids ? x.raids + ' raid' + (x.raids > 1 ? 's' : '') + (x.last ? ' · ' + x.last.slice(8, 10) + '/' + x.last.slice(5, 7) : '') : 'déjà venu';
+  return '<button class="pk-card' + (PK.selExt[x.name] ? ' sel' : '') + (inRaid ? ' in' : '') + '" data-pk="ext" data-key="' + E(x.name) + '"' + (inRaid ? ' disabled' : '') + ' style="--c:' + G.classColor(x.classe) + '">' +
+    '<span class="pk-check">✓</span><span class="pk-name">' + E(x.name) + '</span><span class="pk-cls">' + E(x.classe || 'Externe') + '</span>' +
+    '<span class="pk-meta"><span>' + E(inRaid ? 'Déjà au raid' : meta) + '</span>' + (x.notes && !inRaid ? '<span>' + E(x.notes) + '</span>' : '') + '</span></button>';
+}
+function openPicker() {
+  PK.q = ''; PK.role = 'all'; PK.sel = {}; PK.selExt = {}; PK.newExt = [];
+  const m = G.modal('<div class="pk-head"><div class="row"><h2 class="grow" style="margin:0">Qui est présent ?</h2><button class="btn small" data-pk="cancel" aria-label="Fermer">✕</button></div>' +
+    '<input id="pk-q" placeholder="Rechercher (nom, classe, spé)…" autocomplete="off" style="margin:10px 0 8px"><div class="chips" id="pk-chips"></div></div>' +
+    '<div class="pk-body" id="pk-body"></div>' +
+    '<div class="pk-foot"><button class="btn" data-pk="clear">Effacer</button><button class="btn on grow" data-pk="confirm" id="pk-go">Ajouter</button></div>', 'picker');
+  m.addEventListener('click', pkClick);
+  m.querySelector('#pk-q').addEventListener('input', ev => { PK.q = ev.target.value; renderPicker(); });
+  renderPicker();
+}
+function inRaid() { const o = {}; S.parts.forEach(p => { o[p.key] = true; }); return o; }
+function renderPicker() {
+  const there = inRaid(), q = G.norm(PK.q), order = ['tank', 'soigneur', 'dps'];
+  const match = m => !q || G.norm(m.key + ' ' + m.pseudo + ' ' + m.classe + ' ' + m.spe).indexOf(q) !== -1;
+  const sortFn = (a, b) => (isTit(b) - isTit(a)) || a.key.localeCompare(b.key);
+  const chips = [['all', 'Tous']].concat(order.map(r => [r, G.ROLE[r].emoji + ' ' + G.ROLE[r].name]), [['ext', '👤 Externes']]);
+  document.getElementById('pk-chips').innerHTML = chips.map(c => '<button class="chip' + (PK.role === c[0] ? ' on' : '') + '" data-pk="role" data-role="' + c[0] + '">' + E(c[1]) + '</button>').join('') +
+    '<button class="chip sp" data-pk="titulaires">＋ Tous les titulaires</button>';
+  const secs = [], add = (t, l) => { if (l.length) secs.push({ t, l: l.sort(sortFn) }); };
+  if (PK.role === 'all') {
+    order.forEach(r => add(G.ROLE[r].emoji + ' ' + G.ROLE[r].name, S.members.filter(m => m.role === r && match(m))));
+    add('❓ Rôle à préciser', S.members.filter(m => order.indexOf(m.role) === -1 && match(m)));
+  } else if (PK.role !== 'ext') {
+    const r = PK.role;
+    add(G.ROLE[r].emoji + ' ' + G.ROLE[r].name, S.members.filter(m => m.role === r && match(m)));
+    add('🔁 Peuvent aussi jouer ' + G.ROLE[r].name + ' (spé secondaire)', S.members.filter(m => m.role !== r && m.role2 === r && match(m)));
+  }
+  let html = secs.map(s => {
+    const free = s.l.filter(m => !there[m.key]).length;
+    return '<div class="sec"><span>' + E(s.t) + '</span><span class="muted">' + free + ' disponible' + (free > 1 ? 's' : '') + '</span></div><div class="pk-grid">' + s.l.map(m => pkCard(m, !!there[m.key])).join('') + '</div>';
+  }).join('');
+  if (PK.role === 'all' || PK.role === 'ext') {
+    const ex = pkExt().filter(x => !q || G.norm(x.name + ' ' + x.classe).indexOf(q) !== -1);
+    html += '<div class="sec"><span>👤 Joueurs externes</span><span class="muted">' + ex.length + ' connu' + (ex.length > 1 ? 's' : '') + '</span></div>' +
+      (ex.length ? '<div class="pk-grid">' + ex.map(x => pkExtCard(x, !!there[x.name])).join('') + '</div>' : '<p class="muted small">Aucun externe enregistré : ajoutes-en un ci-dessous, il sera mémorisé pour les prochains raids.</p>') +
+      '<div class="pk-new"><input id="pk-ext" placeholder="Nouvel externe (nom)" autocomplete="off"><select id="pk-extc"><option value="">Classe…</option>' +
+      Object.keys(S.catalog).map(c => '<option>' + E(c) + '</option>').join('') + '</select><button class="btn" data-pk="newext">＋ Ajouter</button></div>';
+  }
+  document.getElementById('pk-body').innerHTML = html || '<p class="muted" style="margin-top:16px">Aucun résultat.</p>';
+  pkCount();
+}
+function pkCount() {
+  const n = Object.keys(PK.sel).length + Object.keys(PK.selExt).length, go = document.getElementById('pk-go');
+  if (!go) return;
+  go.disabled = !n;
+  go.textContent = n ? 'Ajouter ' + n + ' joueur' + (n > 1 ? 's' : '') : 'Touche des joueurs pour les choisir';
+}
+function pkClick(ev) {
+  const el = ev.target.closest('[data-pk]');
+  if (!el || el.disabled) return;
+  const k = el.dataset.key, t = el.dataset.pk;
+  if (t === 'cancel') G.closeModal();
+  else if (t === 'role') { PK.role = el.dataset.role; renderPicker(); }
+  else if (t === 'card') { if (PK.sel[k]) delete PK.sel[k]; else PK.sel[k] = true; el.classList.toggle('sel', !!PK.sel[k]); pkCount(); }
+  else if (t === 'ext') { if (PK.selExt[k]) delete PK.selExt[k]; else PK.selExt[k] = true; el.classList.toggle('sel', !!PK.selExt[k]); pkCount(); }
+  else if (t === 'titulaires') {
+    const there = inRaid(), list = S.members.filter(m => isTit(m) && !there[m.key]);
+    const all = list.length > 0 && list.every(m => PK.sel[m.key]);
+    list.forEach(m => { if (all) delete PK.sel[m.key]; else PK.sel[m.key] = true; });
+    renderPicker();
+  } else if (t === 'clear') { PK.sel = {}; PK.selExt = {}; renderPicker(); }
+  else if (t === 'newext') {
+    const name = document.getElementById('pk-ext').value.trim();
+    if (!name) return;
+    const low = name.toLowerCase();
+    if (S.members.some(m => m.key.toLowerCase() === low)) { G.toast('« ' + name + ' » est déjà dans le roster : choisis-le dans la liste.', true); return; }
+    const known = pkExt().find(x => x.name.toLowerCase() === low);
+    if (!known) PK.newExt.push({ name, classe: document.getElementById('pk-extc').value });
+    PK.selExt[known ? known.name : name] = true;
+    renderPicker();
+  } else if (t === 'confirm') {
+    let added = 0;
+    Object.keys(PK.sel).forEach(key => { if (!S.parts.some(p => p.key === key)) { S.parts.push({ key, externe: false, classe: '', loot: 0, sr: false, hr: false, status: 'present' }); added++; } });
+    Object.keys(PK.selExt).forEach(name => {
+      if (S.parts.some(p => p.key === name)) return;
+      const x = pkExt().find(e => e.name === name) || {};
+      S.parts.push({ key: name, externe: true, classe: x.classe || '', loot: 0, sr: false, hr: false, status: 'present' });
+      if (!S.externals.some(e => e.name === name)) S.externals.push({ name, classe: x.classe || '', notes: '', raids: 0, last: '' });
+      added++;
+    });
+    G.closeModal();
+    if (added) { touch(); renderFilters(); renderGrid(); G.toast(added + ' joueur' + (added > 1 ? 's' : '') + ' ajouté' + (added > 1 ? 's' : '')); }
+  }
+}
+
+/* ---------- clôture ---------- */
+async function openClose() {
+  const m = G.modal('<h2 style="margin-top:0">Clôturer le raid ?</h2><p class="muted">Envoi des dernières modifications…</p>');
+  try {
+    S.dirty = true; S.version++; // force un envoi complet avant l'aperçu
+    clearTimeout(S.retry);
+    while (S.saving) await new Promise(r => setTimeout(r, 100));
+    await flushNow();
+  } catch (e) { m.innerHTML = '<h2 style="margin-top:0">Impossible de clôturer</h2><p class="err">' + E(G.errMsg(e)) + '</p><button class="btn" style="width:100%" id="c-no">Fermer</button>'; m.querySelector('#c-no').onclick = G.closeModal; return; }
+  const rows = S.parts.filter(p => !p.externe && S.byKey[p.key]).map(p => {
+    const mm = S.byKey[p.key], o = G.outcome(S.rules, { points: mm.points, hr: mm.hr, hors: mm.hors }, p);
+    return '<div class="mini"><div><b>' + E(p.key) + '</b><div class="muted small">' + E(o.notes.join(' · ')) + '</div></div><div style="white-space:nowrap">' +
+      mm.points + ' → <b class="gold">' + o.points + '</b>' + (o.hr !== mm.hr ? ' · HR ' + mm.hr + '→' + o.hr : '') + '</div></div>';
+  }).join('');
+  const ext = S.parts.filter(p => p.externe).length;
+  m.innerHTML = '<h2 style="margin-top:0">Clôturer le raid ?</h2><p class="muted small">Les points ne sont modifiés qu\'à la validation, une seule fois. Le classement et l\'historique sont ensuite envoyés sur Discord.</p>' +
+    (rows || '<p class="muted">Aucun membre à mettre à jour.</p>') + (ext ? '<p class="muted small">' + ext + ' externe' + (ext > 1 ? 's' : '') + ' : aucun point.</p>' : '') +
+    '<div class="row sticky-foot"><button class="btn grow" id="c-no">Annuler</button><button class="btn on grow" id="c-ok">Appliquer</button></div>';
+  m.querySelector('#c-no').onclick = G.closeModal;
+  m.querySelector('#c-ok').onclick = async () => {
+    m.querySelector('#c-ok').disabled = true;
+    try {
+      const res = await G.post('eventClose', { id: S.ev.id, participants: S.parts.map(clean) });
+      S.dirty = false; S.stopped = true; clearTimeout(S.retry);
+      try { localStorage.removeItem('gev:' + S.ev.id); localStorage.removeItem('g:pub'); localStorage.removeItem('g:hist'); localStorage.removeItem('g:raids'); } catch (e) {}
+      const note = res.discord === 'ok' ? '<p class="muted small">Classement et historique envoyés sur Discord.</p>' : /^erreur/.test(res.discord) ? '<p class="err small">Discord non mis à jour : ' + E(res.discord) + '</p>' : '';
+      m.innerHTML = '<h2 style="margin-top:0">Raid clôturé ✅</h2>' + res.summary.map(s => '<div class="mini"><b>' + E(s.key) + '</b><span>' + s.before.points + ' → <b class="gold">' + s.after.points + '</b>' + (s.after.hr !== s.before.hr ? ' · HR ' + s.before.hr + '→' + s.after.hr : '') + '</span></div>').join('') + note +
+        '<button class="btn on" style="width:100%;margin-top:14px" id="c-done">Terminé</button>';
+      m.querySelector('#c-done').onclick = () => { G.closeModal(); location.hash = ''; };
+    } catch (e) { G.toast(G.errMsg(e), true); m.querySelector('#c-ok').disabled = false; }
+  };
+}
+// envoi immédiat, en attendant le résultat (utilisé avant la clôture)
+async function flushNow() {
+  await G.post('eventSave', { id: S.ev.id, participants: S.parts.map(clean) });
+  S.dirty = false; try { localStorage.removeItem('gev:' + S.ev.id); } catch (e) {} setSync('ok');
+}
+
+boot();
+</script>
+</body>
+</html>
