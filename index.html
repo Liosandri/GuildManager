@@ -22,7 +22,7 @@ const cfg = G.cfg;
 let pub = null, hist = null;
 
 app.innerHTML =
-  '<div class="hero"><div class="crest">🦁</div><h1>' + E(cfg.NAME || 'Guilde') + '</h1><p class="muted">Portail de guilde · roster, raids, points de SR</p></div>' +
+  '<div class="hero"><img class="banner" src="assets/banner.jpg" alt="' + E(cfg.NAME || 'Guilde') + '" id="banner"><p class="muted">Portail de guilde · roster, raids, points de SR</p></div>' +
   '<div id="next"></div>' +
   '<div class="tiles">' +
   '<a class="tile" href="roster.html"><div class="ico">👥</div><h3>Roster & membres</h3><div class="stat" id="s-roster">…</div></a>' +
@@ -32,6 +32,10 @@ app.innerHTML =
   '<div class="two"><div class="card"><h3>🏆 En tête du classement</h3><div id="top" style="margin-top:6px"><span class="muted">Chargement…</span></div></div>' +
   '<div class="card"><h3>📜 Dernier raid</h3><div id="last" style="margin-top:6px"><span class="muted">Chargement…</span></div></div></div>' +
   '<div id="warn"></div>';
+
+document.getElementById('banner').onerror = function () {
+  this.outerHTML = '<div class="crest">🦁</div><h1>' + E(cfg.NAME || 'Guilde') + '</h1>';   // pas d'image : titre simple
+};
 
 function nextCard() {
   const nx = G.nextRaid();
