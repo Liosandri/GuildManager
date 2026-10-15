@@ -101,6 +101,14 @@ body.busy #busybar { opacity: 1; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
 .mcard { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--c, var(--line)); border-radius: 12px; padding: 10px 12px; }
 .mcard b { overflow-wrap: anywhere; }
+.mc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mc-name { font-size: 16px; line-height: 1.2; }
+.mc-head .btn { padding: 2px 9px; flex: none; }
+.mc-spec { font-size: 13px; margin-top: 2px; }
+.mc-meta { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.mc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tag.link { color: var(--gold); border-color: var(--gold-dim); background: rgba(217,180,90,.08); white-space: normal; }
+.tag.link.soft { color: var(--muted); border-color: var(--line); background: transparent; }
 .sec { font-family: var(--serif); color: var(--gold); letter-spacing: .04em; margin: 20px 0 8px; display: flex; justify-content: space-between; align-items: baseline; }
 .sec .muted { font-family: system-ui, sans-serif; letter-spacing: 0; font-size: 12px; }
 .seg { display: flex; gap: 6px; margin: 8px 0 12px; } .seg .btn { flex: 1; padding: 0 6px; }
