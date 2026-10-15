@@ -21,7 +21,7 @@ const app = document.getElementById('app');
 const bar = document.getElementById('actbar');
 const E = G.esc;
 const S = {
-  rules: { bonus: 10, penalty: 1, noshowPenalty: 10, threshold: 100, hrResetsPoints: true, inactiveDays: 28 },
+  rules: { bonus: 10, penalty: 10, noshowPenalty: 10, threshold: 100, hrResetsPoints: true, inactiveDays: 28 },
   members: [], byKey: {}, externals: [], catalog: {}, raids: [],
   ev: null, parts: [], sel: null, q: '', filter: 'all', dense: null,
   dirty: false, version: 0, saving: false, retry: null, stopped: false, sync: 'ok', syncMsg: '',
@@ -156,7 +156,7 @@ async function flush() {
     if (S.version === v) { S.dirty = false; try { localStorage.removeItem('gev:' + S.ev.id); } catch (e) {} setSync('ok'); }
   } catch (e) {
     const msg = G.errMsg(e);
-    if (/clos|introuvable/i.test(msg)) { S.stopped = true; setSync('bad', msg); }
+    if (/clos|introuvable|même joueur/i.test(msg)) { S.stopped = true; setSync('bad', msg); }
     else { setSync('bad', 'Non envoyé, nouvelle tentative…'); S.retry = setTimeout(flush, 5000); }
   } finally {
     S.saving = false;
@@ -176,6 +176,13 @@ const ROLE_ORDER = ['tank', 'soigneur', 'dps', 'ext', 'other'];
 function groupOf(p) { if (p.externe) return 'ext'; const m = S.byKey[p.key]; return m && ROLE_ORDER.indexOf(m.role) !== -1 ? m.role : 'other'; }
 function sortedParts() {
   return S.parts.slice().sort((a, b) => ROLE_ORDER.indexOf(groupOf(a)) - ROLE_ORDER.indexOf(groupOf(b)) || a.key.localeCompare(b.key));
+}
+// Même joueur (principal + rerolls) : retourne l'autre personnage déjà présent dans le raid, s'il y en a un.
+function mateOf(key, parts) {
+  const m = S.byKey[key];
+  if (!m) return null;
+  const o = (parts || S.parts).find(p => !p.externe && p.key !== key && p.status !== 'noshow' && S.byKey[p.key] && S.byKey[p.key].group === m.group);
+  return o ? o.key : null;
 }
 function classOf(p) { const m = S.byKey[p.key]; if (m) return m.classe; if (p.externe) { const x = S.externals.find(e => e.name === p.key); return (x && x.classe) || p.classe || ''; } return ''; }
 
@@ -244,7 +251,7 @@ function tileHtml(p) {
   const bd = (p.loot ? '<span class="l">+' + p.loot + '</span>' : '') + (p.sr ? '<span class="g">SR</span>' : '') + (p.hr ? '<span class="g">HR</span>' : '') +
     (p.status === 'retard' ? '<span>⏰</span>' : p.status === 'noshow' ? '<span>❌</span>' : '');
   return '<button class="pt ' + p.status + (S.sel === p.key ? ' sel' : '') + '" data-k="' + E(p.key) + '" style="--c:' + G.classColor(classOf(p)) + '">' +
-    '<span class="n">' + E(p.key) + '</span><span class="s">' + sub + '<span class="bd">' + bd + '</span></span></button>';
+    '<span class="n">' + (m && m.type === 'reroll' ? '🔁 ' : '') + E(p.key) + '</span><span class="s">' + sub + '<span class="bd">' + bd + '</span></span></button>';
 }
 
 function renderGrid() {
@@ -289,7 +296,7 @@ function renderBar() {
   const m = S.byKey[p.key], pr = projection(p), noshow = p.status === 'noshow';
   const off = noshow ? ' disabled' : '';
   const info = p.externe ? '<span class="muted small">Externe · aucun point</span>'
-    : pr ? '<span class="muted small">' + E(m.classe) + ' · ' + '<b class="gold">' + m.points + '</b> pts</span>' : '';
+    : pr ? '<span class="muted small">' + E(m.classe) + (m.type === 'reroll' ? ' · 🔁 reroll de ' + E(m.main) : '') + ' · ' + '<b class="gold">' + m.points + '</b> pts</span>' : '';
   bar.innerHTML = '<div class="actbar-in"><div class="who"><b style="color:' + G.classColor(classOf(p)) + '">' + E(p.key) + '</b>' + info + '</div>' +
     '<div class="actrow"><div class="acts">' +
     '<button class="a loot" data-a="loot+"' + off + '>+1' + (p.loot ? ' · ' + p.loot : '') + '</button>' +
@@ -311,6 +318,7 @@ function act(a) {
   else if (a === 'sr') p.sr = !p.sr;
   else if (a === 'hr') p.hr = !p.hr;
   else if (a === 'retard') p.status = p.status === 'retard' ? 'present' : 'retard';
+  else if (a === 'noshow' && p.status === 'noshow' && mateOf(p.key)) { G.toast('« ' + mateOf(p.key) + ' » est déjà présent : c\'est le même joueur.', true); return; }
   else if (a === 'noshow') { p.status = p.status === 'noshow' ? 'present' : 'noshow'; if (p.status === 'noshow') { p.sr = false; p.hr = false; p.loot = 0; } }
   else if (a === 'remove') {
     S.parts = S.parts.filter(x => x.key !== p.key); S.sel = null;
@@ -351,13 +359,15 @@ function pkExt() {
   return out;
 }
 function pkCard(m, inRaid) {
+  const mate = !inRaid && mateOf(m.key);
+  if (mate) inRaid = true;
   const tag = G.statutNorm(m) === 'essai' ? 'Essai' : G.statutNorm(m) === 'remplacant' ? 'Remplaçant' : '';
   const os = m.spe2 ? 'OS : ' + m.spe2 + (m.role2 ? ' ' + G.ROLE[m.role2].emoji : '') : '';
   return '<button class="pk-card' + (PK.sel[m.key] ? ' sel' : '') + (inRaid ? ' in' : '') + '" data-pk="card" data-key="' + E(m.key) + '"' + (inRaid ? ' disabled' : '') + ' style="--c:' + G.classColor(m.classe) + '">' +
     '<span class="pk-check">✓</span><span class="pk-name">' + E(m.key) + '</span>' +
     '<span class="pk-cls">' + E([m.classe, m.spe].filter(Boolean).join(' ')) + ' ' + (G.ROLE[m.role] ? G.ROLE[m.role].emoji : '') + '</span>' +
     '<span class="pk-meta"><span class="pk-pts">' + m.points + ' pts</span>' + (m.hr ? '<span>🎯 HR ' + m.hr + '</span>' : '') +
-    (inRaid ? '<span>Déjà au raid</span>' : '') + (tag ? '<span class="tag">' + tag + '</span>' : '') + (os && !inRaid ? '<span>' + E(os) + '</span>' : '') + '</span></button>';
+    (mate ? '<span>Même joueur : ' + E(mate) + ' est là</span>' : inRaid ? '<span>Déjà au raid</span>' : '') + (m.type === 'reroll' ? '<span class="tag">🔁 de ' + E(m.main) + '</span>' : '') + (tag ? '<span class="tag">' + tag + '</span>' : '') + (os && !inRaid ? '<span>' + E(os) + '</span>' : '') + '</span></button>';
 }
 function pkExtCard(x, inRaid) {
   const meta = x.isNew ? 'Nouveau' : x.raids ? x.raids + ' raid' + (x.raids > 1 ? 's' : '') + (x.last ? ' · ' + x.last.slice(8, 10) + '/' + x.last.slice(5, 7) : '') : 'déjà venu';
@@ -418,10 +428,15 @@ function pkClick(ev) {
   const k = el.dataset.key, t = el.dataset.pk;
   if (t === 'cancel') G.closeModal();
   else if (t === 'role') { PK.role = el.dataset.role; renderPicker(); }
-  else if (t === 'card') { if (PK.sel[k]) delete PK.sel[k]; else PK.sel[k] = true; el.classList.toggle('sel', !!PK.sel[k]); pkCount(); }
+  else if (t === 'card') {
+    if (!PK.sel[k]) {
+      const twin = Object.keys(PK.sel).find(o => S.byKey[o] && S.byKey[k] && S.byKey[o].group === S.byKey[k].group);
+      if (twin) { G.toast('« ' + twin + ' » et « ' + k + ' » sont le même joueur : un seul des deux.', true); return; }
+    }
+    if (PK.sel[k]) delete PK.sel[k]; else PK.sel[k] = true; el.classList.toggle('sel', !!PK.sel[k]); pkCount(); }
   else if (t === 'ext') { if (PK.selExt[k]) delete PK.selExt[k]; else PK.selExt[k] = true; el.classList.toggle('sel', !!PK.selExt[k]); pkCount(); }
   else if (t === 'titulaires') {
-    const there = inRaid(), list = S.members.filter(m => isTit(m) && !there[m.key]);
+    const there = inRaid(), list = S.members.filter(m => isTit(m) && m.type !== 'reroll' && !there[m.key] && !mateOf(m.key));
     const all = list.length > 0 && list.every(m => PK.sel[m.key]);
     list.forEach(m => { if (all) delete PK.sel[m.key]; else PK.sel[m.key] = true; });
     renderPicker();

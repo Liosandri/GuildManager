@@ -42,19 +42,21 @@ function chips() {
   const el = document.getElementById('chips');
   if (view === 'ext') { el.innerHTML = ''; document.getElementById('add').textContent = '＋ Nouvel externe'; return; }
   document.getElementById('add').textContent = '＋ Nouveau membre';
-  const m = pub ? pub.members : [], n = r => m.filter(x => x.role === r).length;
-  const f = [['all', 'Tous ' + m.length], ['tank', '🛡️ ' + n('tank')], ['soigneur', '💚 ' + n('soigneur')], ['dps', '⚔️ ' + n('dps')], ['sub', '🔄 Remplaçants / essai']];
+  const all = pub ? pub.members : [], m = all.filter(x => x.type !== 'reroll'), n = r => m.filter(x => x.role === r).length;
+  const f = [['all', 'Tous ' + m.length], ['tank', '🛡️ ' + n('tank')], ['soigneur', '💚 ' + n('soigneur')], ['dps', '⚔️ ' + n('dps')], ['sub', '🔄 Remplaçants / essai'], ['reroll', '🔁 Rerolls ' + (all.length - m.length)]];
   el.innerHTML = f.map(c => '<button class="chip' + (role === c[0] ? ' on' : '') + '" data-r="' + c[0] + '">' + c[1] + '</button>').join('');
   el.querySelectorAll('[data-r]').forEach(b => b.onclick = () => { role = b.dataset.r; chips(); paint(); });
 }
 
+const kidsOf = key => (pub ? pub.members : []).filter(x => x.type === 'reroll' && x.main === key);
 function card(m) {
   const os = m.spe2 ? 'OS : ' + m.spe2 + (m.role2 ? ' ' + G.ROLE[m.role2].emoji : '') : '';
   const st = G.statutNorm(m);
   return '<div class="mcard" style="--c:' + G.classColor(m.classe) + '"><div class="row"><div class="grow"><b>' + E(m.key) + '</b>' +
     (m.pseudo && m.pseudo !== m.key ? ' <span class="muted small">(' + E(m.pseudo) + ')</span>' : '') +
     '<div class="small" style="color:' + G.classColor(m.classe) + '">' + E([m.classe, m.spe].filter(Boolean).join(' · ')) + ' ' + (G.ROLE[m.role] ? G.ROLE[m.role].emoji : '') + '</div>' +
-    (os ? '<div class="muted small">' + E(os) + '</div>' : '') + '</div>' +
+    (os ? '<div class="muted small">' + E(os) + '</div>' : '') +
+    (m.type === 'reroll' ? '<div class="small" style="color:var(--gold,#d9b45a)">🔁 reroll de <b>' + E(m.main) + '</b></div>' : kidsOf(m.key).length ? '<div class="muted small">🔁 Rerolls : ' + E(kidsOf(m.key).map(k => k.key).join(', ')) + '</div>' : '') + '</div>' +
     (st !== 'titulaire' ? '<span class="tag">' + (st === 'essai' ? 'Essai' : 'Remplaçant') + '</span>' : '') +
     (G.isOfficer() ? '<button class="btn small" data-edit="' + E(m.key) + '">✎</button>' : '') + '</div></div>';
 }
@@ -63,14 +65,14 @@ function paint() {
   const list = document.getElementById('list');
   if (view === 'ext') return paintExt(list);
   if (!pub) return;
-  const nq = G.norm(q), m = pub.members;
+  const nq = G.norm(q), all = pub.members, m = all.filter(x => x.type !== 'reroll'), rrs = all.filter(x => x.type === 'reroll');
   const t = m.filter(x => G.statutNorm(x) === 'titulaire');
-  document.getElementById('sub').textContent = m.length + ' membre' + (m.length > 1 ? 's' : '') + ' · titulaires : 🛡️ ' + t.filter(x => x.role === 'tank').length + ' · 💚 ' + t.filter(x => x.role === 'soigneur').length + ' · ⚔️ ' + t.filter(x => x.role === 'dps').length;
-  const ok = x => !nq || G.norm(x.key + ' ' + x.pseudo + ' ' + x.classe + ' ' + x.spe + ' ' + x.spe2).indexOf(nq) !== -1;
+  document.getElementById('sub').textContent = m.length + ' membre' + (m.length > 1 ? 's' : '') + (rrs.length ? ' + ' + rrs.length + ' reroll' + (rrs.length > 1 ? 's' : '') : '') + ' · titulaires : 🛡️ ' + t.filter(x => x.role === 'tank').length + ' · 💚 ' + t.filter(x => x.role === 'soigneur').length + ' · ⚔️ ' + t.filter(x => x.role === 'dps').length;
+  const ok = x => !nq || G.norm(x.key + ' ' + x.pseudo + ' ' + x.classe + ' ' + x.spe + ' ' + x.spe2 + ' ' + (x.main || '')).indexOf(nq) !== -1;
   const byName = (a, b) => a.key.localeCompare(b.key);
   const secs = [];
   ['tank', 'soigneur', 'dps'].forEach(r => {
-    if (role !== 'all' && role !== r) return;
+    if (role === 'reroll' || (role !== 'all' && role !== r)) return;
     secs.push([G.ROLE[r].emoji + ' ' + G.ROLE[r].name, t.filter(x => x.role === r && ok(x)).sort(byName)]);
   });
   if (role === 'all') secs.push(['❓ Rôle à préciser', t.filter(x => !G.ROLE[x.role] && ok(x)).sort(byName)]);
@@ -78,8 +80,9 @@ function paint() {
     secs.push(['🔄 Remplaçants', m.filter(x => G.statutNorm(x) === 'remplacant' && ok(x)).sort(byName)]);
     secs.push(['🆕 Essai', m.filter(x => G.statutNorm(x) === 'essai' && ok(x)).sort(byName)]);
   }
+  if (role === 'all' || role === 'reroll') secs.push(['🔁 Rerolls (visibles seulement ici)', rrs.filter(ok).sort((a, b) => (a.main || '').localeCompare(b.main || '') || byName(a, b))]);
   list.innerHTML = secs.filter(s => s[1].length).map(s => '<div class="sec"><span>' + E(s[0]) + '</span><span class="muted">' + s[1].length + '</span></div><div class="grid">' + s[1].map(card).join('') + '</div>').join('') ||
-    '<div class="empty">' + (m.length ? 'Aucun résultat.' : 'Le roster est vide. Ajoute le premier membre avec « ＋ Nouveau membre ».') + '</div>';
+    '<div class="empty">' + (all.length ? 'Aucun résultat.' : 'Le roster est vide. Ajoute le premier membre avec « ＋ Nouveau membre ».') + '</div>';
   list.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => memberForm(b.dataset.edit));
 }
 
@@ -87,24 +90,73 @@ function paint() {
 const mf = {};
 function memberForm(key) {
   const m = key ? pub.members.find(x => x.key === key) : null;
-  Object.assign(mf, m ? { original: m.key, pseudo: m.pseudo, perso: m.key, classe: m.classe, spe: m.spe, role: m.role, spe2: m.spe2, role2: m.role2, statut: m.statut }
-    : { original: '', pseudo: '', perso: '', classe: '', spe: '', role: '', spe2: '', role2: '', statut: 'Titulaire' });
+  Object.assign(mf, m ? { original: m.key, pseudo: m.pseudo, perso: m.key, classe: m.classe, spe: m.spe, role: m.role, spe2: m.spe2, role2: m.role2, statut: m.statut, type: m.type || 'principal', main: m.main || '', origType: m.type || 'principal', origMain: m.main || '', panel: '', pick: '' }
+    : { original: '', pseudo: '', perso: '', classe: '', spe: '', role: '', spe2: '', role2: '', statut: 'Titulaire', type: 'principal', main: '', origType: 'principal', origMain: '', panel: '', pick: '' });
   renderForm();
 }
 const chipsRole = f => '<div class="roles">' + ['tank', 'soigneur', 'dps'].map(r => '<button class="chip' + (mf[f] === r ? ' on' : '') + '" data-role="' + f + ':' + r + '">' + G.ROLE[r].emoji + ' ' + G.ROLE[r].one + '</button>').join('') + '</div>';
+const typeChips = () => '<div class="roles"><button class="chip' + (mf.type !== 'reroll' ? ' on' : '') + '" data-type="principal">⭐ Principal</button><button class="chip' + (mf.type === 'reroll' ? ' on' : '') + '" data-type="reroll">🔁 Reroll</button></div>';
+function typeBlock(edit) {
+  const kids = edit ? kidsOf(mf.original) : [];
+  if (kids.length) return '<label>Type de personnage</label><p class="muted small" style="margin:0 0 4px">⭐ Principal · a ' + kids.length + ' reroll' + (kids.length > 1 ? 's' : '') + ' (' + E(kids.map(k => k.key).join(', ')) + ')</p>';
+  const mains = pub.members.filter(x => x.type !== 'reroll' && x.key !== mf.original).sort((a, b) => a.key.localeCompare(b.key));
+  return '<label>Type de personnage</label>' + typeChips() +
+    '<p class="muted small" style="margin:4px 0 0">' + (mf.type === 'reroll' ? 'Visible seulement dans l\'app, pas dans le roster Discord. Il a ses propres points.' : 'Affiché dans le roster Discord.') + '</p>' +
+    (mf.type === 'reroll' ? '<label>Reroll de qui ?</label><select data-sel="main"><option value="">Choisir le personnage principal…</option>' + mains.map(x => '<option' + (x.key === mf.main ? ' selected' : '') + ' value="' + E(x.key) + '">' + E(x.key) + ' (' + E(x.classe) + ')</option>').join('') + '</select>' : '');
+}
+// Intervertir / Quitte la guilde (fiche d'un membre existant)
+function extras() {
+  const kids = kidsOf(mf.original), isRe = mf.origType === 'reroll', [pn, pk] = (mf.panel || '|').split('|');
+  let html = '<div style="border-top:1px solid var(--line,#2a3a55);margin-top:14px;padding-top:10px"><div class="muted small" style="margin-bottom:6px">Actions sur ce personnage</div><div class="row" style="flex-wrap:wrap">';
+  if (isRe) html += '<button class="btn small' + (pn === 'swap' ? ' on' : '') + '" data-panel="swap|' + E(mf.origMain) + '">⇄ Passer principal</button>';
+  kids.forEach(k => { html += '<button class="btn small' + (pn === 'swap' && pk === k.key ? ' on' : '') + '" data-panel="swap|' + E(k.key) + '">⇄ Intervertir avec ' + E(k.key) + '</button>'; });
+  html += '<button class="btn small' + (pn === 'leave' ? ' on' : '') + '" data-panel="leave|">🚪 Quitte la guilde</button></div>';
+  if (pn === 'swap') {
+    const a = isRe ? mf.original : pk, b = isRe ? mf.origMain : mf.original;
+    html += '<div class="banner" style="margin-top:8px"><b>' + E(a) + '</b> devient le personnage principal (roster Discord) et <b>' + E(b) + '</b> passe reroll. Les points restent sur chaque personnage.</div><button class="btn on" id="x-go" style="width:100%;margin-top:8px">Confirmer l\'inversion</button>';
+  } else if (pn === 'leave') {
+    let txt = 'Les points de <b>' + E(mf.original) + '</b> sont perdus et le personnage est retiré de l\'app.', pick = '';
+    if (!isRe && kids.length === 1) txt += ' <b>' + E(kids[0].key) + '</b> devient le personnage principal et garde ses points.';
+    if (!isRe && kids.length > 1) {
+      if (!mf.pick) mf.pick = kids[0].key;
+      txt += ' Un de ses rerolls devient principal et garde ses points :';
+      pick = '<select data-pickheir style="margin-top:6px">' + kids.map(k => '<option' + (k.key === mf.pick ? ' selected' : '') + ' value="' + E(k.key) + '">' + E(k.key) + '</option>').join('') + '</select>';
+    }
+    html += '<div class="banner" style="margin-top:8px">' + txt + pick + '</div><button class="btn on bad" id="x-go" style="width:100%;margin-top:8px">Confirmer le départ</button>';
+  }
+  return html + '</div>';
+}
 function renderForm() {
   const edit = !!mf.original, catalog = pub.catalog || {}, specs = catalog[mf.classe] || [];
   const opts = (arr, sel, blank) => '<option value="">' + E(blank) + '</option>' + arr.map(v => '<option' + (v === sel ? ' selected' : '') + '>' + E(v) + '</option>').join('');
   const el = G.modal('<h2 style="margin-top:0">' + (edit ? 'Fiche · ' + E(mf.perso) : 'Nouveau membre') + '</h2>' +
     (edit ? '<p class="muted small" style="margin:0 0 6px">Changement de spé ou de rôle (ex. tank → soigneur) : modifie la spé puis vérifie le rôle. Les points sont conservés.</p>' : '') + '<label>Personnage (en jeu)</label><input data-in="perso" value="' + E(mf.perso) + '"' + (edit ? ' disabled' : '') + ' autocomplete="off">' +
-    '<label>Pseudo Discord</label><input data-in="pseudo" value="' + E(mf.pseudo) + '" autocomplete="off">' +
+    typeBlock(edit) +
+    '<label>Pseudo Discord' + (mf.type === 'reroll' ? ' (vide = celui du principal)' : '') + '</label><input data-in="pseudo" value="' + E(mf.pseudo) + '" autocomplete="off">' +
     '<label>Classe</label><select data-sel="classe">' + opts(Object.keys(catalog), mf.classe, 'Choisir…') + '</select>' +
     '<label>Spé principale</label><select data-sel="spe"' + (mf.classe ? '' : ' disabled') + '>' + opts(specs, mf.spe, 'Choisir…') + '</select>' + (mf.spe ? chipsRole('role') : '') +
     '<label>Spé secondaire (facultatif)</label><select data-sel="spe2"' + (mf.classe ? '' : ' disabled') + '>' + opts(specs, mf.spe2, 'Aucune') + '</select>' + (mf.spe2 ? chipsRole('role2') : '') +
     '<label>Statut</label><select data-sel="statut">' + ['Titulaire', 'Remplaçant', 'Essai'].map(t => '<option' + (t === mf.statut ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>' +
-    '<div class="err" id="f-err"></div><div class="row" style="margin-top:8px"><button class="btn grow" id="f-no">Annuler</button><button class="btn on grow" id="f-ok">' + (edit ? 'Enregistrer' : 'Ajouter au roster') + '</button></div>');
+    '<div class="err" id="f-err"></div><div class="row" style="margin-top:8px"><button class="btn grow" id="f-no">Annuler</button><button class="btn on grow" id="f-ok">' + (edit ? 'Enregistrer' : 'Ajouter au roster') + '</button></div>' + (edit ? extras() : ''));
   el.querySelector('#f-no').onclick = G.closeModal;
   el.querySelectorAll('[data-in]').forEach(i => i.oninput = () => { mf[i.dataset.in] = i.value; });
+  el.querySelectorAll('[data-type]').forEach(b => b.onclick = () => { mf.type = b.dataset.type; if (mf.type === 'principal') mf.main = ''; renderForm(); });
+  el.querySelectorAll('[data-panel]').forEach(b => b.onclick = () => { const [pn, pk] = b.dataset.panel.split('|'); mf.panel = mf.panel === pn + '|' + pk ? '' : pn + '|' + pk; mf.pick = pk || ''; renderForm(); });
+  el.querySelectorAll('[data-pickheir]').forEach(s => s.onchange = () => { mf.pick = s.value; });
+  const act = el.querySelector('#x-go');
+  if (act) act.onclick = async () => {
+    act.disabled = true;
+    const [pn, pk] = mf.panel.split('|');
+    try {
+      const r = pn === 'swap'
+        ? await G.post('memberSwap', mf.origType === 'reroll' ? { main: mf.origMain, reroll: mf.original } : { main: mf.original, reroll: pk })
+        : await G.post('memberLeave', { key: mf.original, heir: mf.pick || '' });
+      pub.members = r.members; try { localStorage.removeItem('g:pub'); localStorage.removeItem('g:hist'); } catch (e) {}
+      G.closeModal(); chips(); paint();
+      G.toast(pn === 'swap' ? 'Principal et reroll intervertis' : mf.original + ' a quitté la guilde');
+      if (/^erreur/.test(r.discord)) G.toast('Discord : ' + r.discord, true);
+    } catch (e) { el.querySelector('#f-err').textContent = G.errMsg(e); act.disabled = false; }
+  };
   el.querySelectorAll('[data-role]').forEach(b => b.onclick = () => { const [f, r] = b.dataset.role.split(':'); mf[f] = r; renderForm(); });
   el.querySelectorAll('[data-sel]').forEach(s => s.onchange = () => {
     const f = s.dataset.sel; mf[f] = s.value;

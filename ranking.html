@@ -46,7 +46,7 @@ function paint() {
     if (m.last) { const days = Math.floor((Date.now() - new Date(m.last + 'T12:00:00').getTime()) / 86400000); last = G.fmtDay(m.last) + (days > R.inactiveDays ? ' ⚠ inactif' : ''); }
     const officer = G.isOfficer();
     return '<div class="card cc" style="--c:' + G.classColor(m.classe) + '"><div class="rk"><div class="pos">' + (pos <= 3 ? ['🥇', '🥈', '🥉'][pos - 1] : pos) + '</div>' +
-      '<div><b>' + E(m.key) + '</b> <span class="muted small">' + E([m.classe, m.spe].filter(Boolean).join(' ')) + ' ' + (G.ROLE[m.role] ? G.ROLE[m.role].emoji : '') + '</span></div>' +
+      '<div><b>' + E(m.key) + '</b>' + (m.type === 'reroll' ? ' <span class="tag">🔁 reroll de ' + E(m.main) + '</span>' : '') + ' <span class="muted small">' + E([m.classe, m.spe].filter(Boolean).join(' ')) + ' ' + (G.ROLE[m.role] ? G.ROLE[m.role].emoji : '') + '</span></div>' +
       '<div class="pts">' + m.points + '<span class="muted small"> pts</span></div>' +
       '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
       '<div class="meta"><span>🎯 HR : <b>' + m.hr + '</b></span><span>Hors SR : <b>+' + m.hors + '</b></span><span>Dernier raid : ' + E(last) + '</span><span class="grow"></span>' +
