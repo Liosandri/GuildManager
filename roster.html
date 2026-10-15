@@ -51,14 +51,16 @@ function chips() {
 const kidsOf = key => (pub ? pub.members : []).filter(x => x.type === 'reroll' && x.main === key);
 function card(m) {
   const os = m.spe2 ? 'OS : ' + m.spe2 + (m.role2 ? ' ' + G.ROLE[m.role2].emoji : '') : '';
-  const st = G.statutNorm(m);
-  return '<div class="mcard" style="--c:' + G.classColor(m.classe) + '"><div class="row"><div class="grow"><b>' + E(m.key) + '</b>' +
-    (m.pseudo && m.pseudo !== m.key ? ' <span class="muted small">(' + E(m.pseudo) + ')</span>' : '') +
-    '<div class="small" style="color:' + G.classColor(m.classe) + '">' + E([m.classe, m.spe].filter(Boolean).join(' · ')) + ' ' + (G.ROLE[m.role] ? G.ROLE[m.role].emoji : '') + '</div>' +
-    (os ? '<div class="muted small">' + E(os) + '</div>' : '') +
-    (m.type === 'reroll' ? '<div class="small" style="color:var(--gold,#d9b45a)">🔁 reroll de <b>' + E(m.main) + '</b></div>' : kidsOf(m.key).length ? '<div class="muted small">🔁 Rerolls : ' + E(kidsOf(m.key).map(k => k.key).join(', ')) + '</div>' : '') + '</div>' +
-    (st !== 'titulaire' ? '<span class="tag">' + (st === 'essai' ? 'Essai' : 'Remplaçant') + '</span>' : '') +
-    (G.isOfficer() ? '<button class="btn small" data-edit="' + E(m.key) + '">✎</button>' : '') + '</div></div>';
+  const st = G.statutNorm(m), kids = kidsOf(m.key), c = G.classColor(m.classe);
+  const meta = [m.pseudo && m.pseudo !== m.key ? '💬 ' + E(m.pseudo) : '', os ? E(os) : ''].filter(Boolean).join(' · ');
+  const chips = (st !== 'titulaire' ? '<span class="tag">' + (st === 'essai' ? '🆕 Essai' : '🔄 Remplaçant') + '</span>' : '') +
+    (m.type === 'reroll' ? '<span class="tag link">🔁 reroll de <b>' + E(m.main) + '</b></span>' : '') +
+    (kids.length ? '<span class="tag link soft">🔁 ' + (kids.length > 1 ? 'Rerolls' : 'Reroll') + ' : ' + E(kids.map(k => k.key).join(', ')) + '</span>' : '');
+  return '<div class="mcard" style="--c:' + c + '"><div class="mc-head"><b class="mc-name">' + E(m.key) + '</b>' +
+    (G.isOfficer() ? '<button class="btn small" data-edit="' + E(m.key) + '" aria-label="Modifier">✎</button>' : '') + '</div>' +
+    '<div class="mc-spec" style="color:' + c + '">' + E([m.classe, m.spe].filter(Boolean).join(' · ')) + ' ' + (G.ROLE[m.role] ? G.ROLE[m.role].emoji : '') + '</div>' +
+    (meta ? '<div class="mc-meta">' + meta + '</div>' : '') +
+    (chips ? '<div class="mc-chips">' + chips + '</div>' : '') + '</div>';
 }
 
 function paint() {
