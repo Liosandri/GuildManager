@@ -21,7 +21,7 @@ const app = document.getElementById('app');
 const bar = document.getElementById('actbar');
 const E = G.esc;
 const S = {
-  rules: { bonus: 10, penalty: 10, noshowPenalty: 10, threshold: 100, hrResetsPoints: true, inactiveDays: 28 },
+  rules: { bonus: 10, penalty: 10, noshowPenalty: 10, threshold: 100, hrResetsPoints: false, inactiveDays: 28 },
   members: [], byKey: {}, externals: [], catalog: {}, raids: [],
   ev: null, parts: [], sel: null, q: '', filter: 'all', dense: null,
   dirty: false, version: 0, saving: false, retry: null, stopped: false, sync: 'ok', syncMsg: '',
