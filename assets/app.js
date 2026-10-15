@@ -154,7 +154,7 @@ const G = (() => {
     const el = document.getElementById('nav');
     if (!el) return;
     el.className = 'nav';
-    el.innerHTML = '<div class="nav-in"><a class="brand" href="index.html"><img class="crest-img" src="assets/lion.png" alt="" width="34" height="34">' + esc(cfg.NAME || 'Guilde') + '</a>' +
+    el.innerHTML = '<div class="nav-in"><a class="brand" href="index.html"><img class="crest-img" src="assets/lion.png?v=2" alt="" width="34" height="34">' + esc(cfg.NAME || 'Guilde') + '</a>' +
       '<nav class="links">' + PAGES.map(p => '<a href="' + p[0] + '" class="' + (p[0] === active ? 'on' : '') + '"><span class="ic">' + p[1] + '</span> ' + p[2] + '</a>').join('') + '</nav>' +
       '<div class="me">' + (isOfficer() ? '<button class="btn small" id="me-out" title="Se déconnecter">🔓 Quitter</button>' : '') + '</div></div>';
     const out = el.querySelector('#me-out'), inn = el.querySelector('#me-in');
@@ -197,7 +197,8 @@ const G = (() => {
       attended = true;
       hors += p.loot;
       if (p.loot) notes.push('Loot hors SR : +' + p.loot);
-      if (p.sr || (p.hr && rules.hrResetsPoints)) { points = 0; notes.push(p.sr ? 'SR obtenu : points à 0' : 'HR obtenue : points à 0'); }
+      if (p.sr) { points = 0; notes.push('SR obtenu : points à 0'); }
+      else if (p.hr) { if (rules.hrResetsPoints) { points = 0; notes.push('HR obtenue : points à 0'); } else notes.push('HR obtenue : points conservés'); }
       else { points += rules.bonus; notes.push('+' + rules.bonus + ' points'); }
       if (p.hr) { if (hr > 0) { hr -= 1; notes.push('HR utilisée'); } else notes.push('HR obtenue sans HR en attente'); }
       if (p.status === 'retard') { points = Math.max(0, points - rules.penalty); notes.push('Retard : -' + rules.penalty); }
