@@ -23,7 +23,7 @@ const bar = document.getElementById('actbar');
 const E = G.esc;
 const S = {
   rules: { bonus: 10, penalty: 10, noshowPenalty: 10, threshold: 100, hrResetsPoints: false, inactiveDays: 28 },
-  members: [], byKey: {}, externals: [], catalog: {}, raids: [],
+  members: [], byKey: {}, externals: [], catalog: {}, raids: [], instances: [], seasons: [],
   ev: null, parts: [], sel: null, q: '', filter: 'all', dense: null,
   dirty: false, version: 0, saving: false, retry: null, stopped: false, sync: 'ok', syncMsg: '',
 };
@@ -48,30 +48,56 @@ async function showList() {
   stopEvent(); evMode(false);
   bar.classList.add('hidden');
   const nx = G.nextRaid();
-  const defName = nx ? nx.name : 'Raid';
   const defDate = nx ? G.isoDay(nx.start) : G.todayIso();
   app.innerHTML =
-    '<div class="pagehead"><div><h1>⚔️ Événements</h1><p class="muted small">Crée un raid, ajoute les présents, note les loots, puis clôture.</p></div></div>' +
-    '<div class="card"><b>Nouveau raid</b>' +
-    '<div class="row" style="margin-top:10px;flex-wrap:wrap"><input id="nr-name" class="grow" style="min-width:180px" value="' + E(defName) + '" placeholder="Nom du raid">' +
-    '<input id="nr-date" type="date" value="' + defDate + '" style="width:160px"></div>' +
-    '<button class="btn on" id="nr-go" style="width:100%;margin-top:10px">Créer le raid</button></div>' +
-    '<h2>Raids</h2><div id="list"><p class="muted">Chargement…</p></div>';
-  document.getElementById('nr-go').onclick = createEvent;
+    '<div class="pagehead"><div><h1>⚔️ Événements</h1><p class="muted small">Choisis le raid, ajoute les présents, note les loots, puis clôture. Les points vont à la saison du raid.</p></div>' +
+    '<a class="btn small" href="seasons.html">🗂️ Raids et saisons</a></div>' +
+    '<div class="card" id="newcard"><b>Nouvel événement</b><div id="nr-form"><p class="muted small" style="margin:8px 0 0">Chargement…</p></div></div>' +
+    '<h2>Événements</h2><div id="list"><p class="muted">Chargement…</p></div>';
+  S.defDate = defDate;
   try {
-    await G.swr('raids', () => G.get('public').then(d => d.raids), raids => { S.raids = raids; renderList(); });
+    await G.swr('pub', () => G.get('public'), d => { S.raids = d.raids; S.instances = d.instances || []; S.seasons = d.seasons || []; renderForm(); renderList(); });
   } catch (e) { document.getElementById('list').innerHTML = '<p class="err">' + E(G.errMsg(e)) + '</p>'; }
+}
+
+const seasonName = id => { const x = S.seasons.find(y => y.id === id); return x ? x.name : id; };
+const seasonTag = id => '<span class="tag season" title="' + E(seasonName(id)) + '">' + E(id || '') + '</span>';
+
+function renderForm() {
+  const el = document.getElementById('nr-form');
+  if (!el) return;
+  const keep = document.getElementById('nr-inst') ? document.getElementById('nr-inst').value : '';
+  const keepDate = document.getElementById('nr-date') ? document.getElementById('nr-date').value : S.defDate;
+  if (!S.instances.length) {
+    el.innerHTML = '<p class="muted small" style="margin:8px 0">Aucun raid dans le catalogue pour le moment. Crée d\'abord ton premier raid (ex. Molten Core) et choisis sa saison.</p>' +
+      '<a class="btn on" href="seasons.html" style="width:100%;text-align:center">🗂️ Créer un raid</a>';
+    return;
+  }
+  let last = ''; try { last = localStorage.getItem('g:lastInst') || ''; } catch (e) {}
+  const pick = keep || (S.instances.some(i => i.name === last) ? last : S.instances[0].name);
+  el.innerHTML =
+    '<div class="row" style="margin-top:10px;flex-wrap:wrap"><select id="nr-inst" class="grow" style="min-width:200px">' +
+    S.instances.map(i => '<option value="' + E(i.name) + '"' + (i.name === pick ? ' selected' : '') + '>' + E(i.name) + ' · ' + E(i.season) + '</option>').join('') + '</select>' +
+    '<input id="nr-date" type="date" value="' + E(keepDate) + '" style="width:160px"></div>' +
+    '<div id="nr-hint" class="muted small" style="margin-top:6px"></div>' +
+    '<button class="btn on" id="nr-go" style="width:100%;margin-top:10px">Créer l\'événement</button>';
+  const hint = () => {
+    const i = S.instances.find(x => x.name === document.getElementById('nr-inst').value);
+    document.getElementById('nr-hint').innerHTML = i ? 'Les joueurs gagneront des points de la saison ' + seasonTag(i.season) + ' <b>' + E(seasonName(i.season)) + '</b>.' : '';
+  };
+  document.getElementById('nr-inst').onchange = hint; hint();
+  document.getElementById('nr-go').onclick = createEvent;
 }
 
 function renderList() {
   const el = document.getElementById('list');
   if (!el) return;
   el.innerHTML = S.raids.length ? S.raids.map(r =>
-    '<div class="card"><div class="row"><div class="grow"><b>' + E(r.name) + '</b> <span class="tag ' + (r.status === 'En cours' ? 'open' : '') + '">' + E(r.status) + '</span>' +
+    '<div class="card"><div class="row"><div class="grow"><b>' + E(r.name) + '</b> ' + seasonTag(r.season) + ' <span class="tag ' + (r.status === 'En cours' ? 'open' : '') + '">' + E(r.status) + '</span>' +
     '<div class="muted small">' + G.fmtDay(r.date) + ' · ' + r.count + ' joueur' + (r.count > 1 ? 's' : '') + (r.closedAt ? ' · clôturé le ' + G.fmtDay(r.closedAt) : '') + '</div></div>' +
     '<a class="btn small on" href="#/' + E(r.id) + '" style="display:inline-flex;align-items:center">' + (r.status === 'En cours' ? 'Gérer' : 'Voir') + '</a>' +
     '<button class="btn small" data-del="' + E(r.id) + '" title="Supprimer" aria-label="Supprimer">🗑</button></div></div>').join('')
-    : '<div class="empty">Aucun raid pour le moment.</div>';
+    : '<div class="empty">Aucun événement pour le moment.</div>';
   el.querySelectorAll('[data-del]').forEach(b => b.onclick = () => askDelete(b.dataset.del));
 }
 
@@ -79,7 +105,9 @@ async function createEvent() {
   const btn = document.getElementById('nr-go');
   btn.disabled = true;
   try {
-    const r = await G.post('eventCreate', { name: document.getElementById('nr-name').value, date: document.getElementById('nr-date').value });
+    const inst = document.getElementById('nr-inst').value;
+    const r = await G.post('eventCreate', { instance: inst, date: document.getElementById('nr-date').value });
+    try { localStorage.setItem('g:lastInst', inst); localStorage.removeItem('g:pub'); } catch (e) {}
     S.raids = r.raids;
     location.hash = '#/' + r.event.id;
   } catch (e) { G.toast(G.errMsg(e), true); btn.disabled = false; }
@@ -88,7 +116,7 @@ async function createEvent() {
 function askDelete(id) {
   const r = S.raids.find(x => x.id === id);
   if (!r) return;
-  const m = G.modal('<h2 style="margin-top:0">Supprimer ce raid ?</h2>' +
+  const m = G.modal('<h2 style="margin-top:0">Supprimer cet événement ?</h2>' +
     '<p><b>' + E(r.name) + '</b> · ' + G.fmtDay(r.date) + ' · ' + E(r.status) + '</p>' +
     '<p class="muted small">Le raid et sa liste de présents sont supprimés. Les points déjà attribués et l\'historique sont conservés.' +
     (r.status === 'En cours' ? ' <b class="gold">Ce raid n\'est pas clôturé : aucun point ne sera attribué.</b>' : '') + '</p>' +
@@ -98,7 +126,7 @@ function askDelete(id) {
     m.querySelector('#d-ok').disabled = true;
     try {
       const res = await G.post('eventDelete', { id });
-      S.raids = res.raids; try { localStorage.removeItem('gev:' + id); } catch (e) {}
+      S.raids = res.raids; try { localStorage.removeItem('gev:' + id); localStorage.removeItem('g:pub'); } catch (e) {}
       G.closeModal(); renderList(); G.toast('Raid supprimé');
     } catch (e) { G.toast(G.errMsg(e), true); m.querySelector('#d-ok').disabled = false; }
   };
@@ -193,8 +221,8 @@ function renderEvent() {
   app.innerHTML =
     '<div class="' + (S.dense ? 'dense' : '') + '" id="evroot">' +
     '<div class="evbar"><div class="row t"><a class="btn small" href="#" aria-label="Retour">←</a>' +
-    '<div class="grow" style="min-width:0"><div class="rname" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + E(raid.name) + (open ? '' : ' <span class="tag">' + E(raid.status) + '</span>') + '</div>' +
-    '<div class="muted small sub">' + G.fmtDay(raid.date) + (open ? ' · en cours' : '') + '</div></div>' +
+    '<div class="grow" style="min-width:0"><div class="rname" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + E(raid.name) + ' ' + seasonTag(raid.season) + (open ? '' : ' <span class="tag">' + E(raid.status) + '</span>') + '</div>' +
+    '<div class="muted small sub">' + G.fmtDay(raid.date) + (open ? ' · en cours' : '') + ' · points de la saison <b>' + E(raid.season) + '</b></div></div>' +
     (open ? '<button class="btn small on" id="b-add">＋ Joueurs</button><button class="btn small" id="b-close">Clôturer</button>' : '') + '</div>' +
     '<div class="evtools"><input id="q" placeholder="Chercher un joueur…" autocomplete="off" value="' + E(S.q) + '">' +
     '<button class="btn small" id="b-dense" title="Taille des cases">' + (S.dense ? '▦' : '▤') + '</button></div>' +
@@ -297,7 +325,7 @@ function renderBar() {
   const m = S.byKey[p.key], pr = projection(p), noshow = p.status === 'noshow';
   const off = noshow ? ' disabled' : '';
   const info = p.externe ? '<span class="muted small">Externe · aucun point</span>'
-    : pr ? '<span class="muted small">' + E(m.classe) + (m.type === 'reroll' ? ' · 🔁 reroll de ' + E(m.main) : '') + ' · ' + '<b class="gold">' + m.points + '</b> pts</span>' : '';
+    : pr ? '<span class="muted small">' + E(m.classe) + (m.type === 'reroll' ? ' · 🔁 reroll de ' + E(m.main) : '') + ' · ' + '<b class="gold">' + m.points + '</b> pts ' + E(S.ev.season) + '</span>' : '';
   bar.innerHTML = '<div class="actbar-in"><div class="who"><b style="color:' + G.classColor(classOf(p)) + '">' + E(p.key) + '</b>' + info + '</div>' +
     '<div class="actrow"><div class="acts">' +
     '<button class="a loot" data-a="loot+"' + off + '>+1' + (p.loot ? ' · ' + p.loot : '') + '</button>' +
@@ -367,7 +395,7 @@ function pkCard(m, inRaid) {
   return '<button class="pk-card' + (PK.sel[m.key] ? ' sel' : '') + (inRaid ? ' in' : '') + '" data-pk="card" data-key="' + E(m.key) + '"' + (inRaid ? ' disabled' : '') + ' style="--c:' + G.classColor(m.classe) + '">' +
     '<span class="pk-check">✓</span><span class="pk-name">' + E(m.key) + '</span>' +
     '<span class="pk-cls">' + E([m.classe, m.spe].filter(Boolean).join(' ')) + ' ' + (G.ROLE[m.role] ? G.ROLE[m.role].emoji : '') + '</span>' +
-    '<span class="pk-meta"><span class="pk-pts">' + m.points + ' pts</span>' + (m.hr ? '<span>🎯 HR ' + m.hr + '</span>' : '') +
+    '<span class="pk-meta"><span class="pk-pts">' + m.points + ' pts ' + E(S.ev.season) + '</span>' + (m.hr ? '<span>🎯 HR ' + m.hr + '</span>' : '') +
     (mate ? '<span>Même joueur : ' + E(mate) + ' est là</span>' : inRaid ? '<span>Déjà au raid</span>' : '') + (m.type === 'reroll' ? '<span class="tag">🔁 de ' + E(m.main) + '</span>' : '') + (tag ? '<span class="tag">' + tag + '</span>' : '') + (os && !inRaid ? '<span>' + E(os) + '</span>' : '') + '</span></button>';
 }
 function pkExtCard(x, inRaid) {
@@ -379,6 +407,7 @@ function pkExtCard(x, inRaid) {
 function openPicker() {
   PK.q = ''; PK.role = 'all'; PK.sel = {}; PK.selExt = {}; PK.newExt = [];
   const m = G.modal('<div class="pk-head"><div class="row"><h2 class="grow" style="margin:0">Qui est présent ?</h2><button class="btn small" data-pk="cancel" aria-label="Fermer">✕</button></div>' +
+    '<div class="muted small" style="margin-top:4px">Points affichés : saison <b>' + E(S.ev.season) + '</b> (' + E(S.ev.instance || S.ev.name) + ')</div>' +
     '<input id="pk-q" placeholder="Rechercher (nom, classe, spé)…" autocomplete="off" style="margin:10px 0 8px"><div class="chips" id="pk-chips"></div></div>' +
     '<div class="pk-body" id="pk-body"></div>' +
     '<div class="pk-foot"><button class="btn" data-pk="clear">Effacer</button><button class="btn on grow" data-pk="confirm" id="pk-go">Ajouter</button></div>', 'picker');
@@ -481,7 +510,7 @@ async function openClose() {
       mm.points + ' → <b class="gold">' + o.points + '</b>' + (o.hr !== mm.hr ? ' · HR ' + mm.hr + '→' + o.hr : '') + '</div></div>';
   }).join('');
   const ext = S.parts.filter(p => p.externe).length;
-  m.innerHTML = '<h2 style="margin-top:0">Clôturer le raid ?</h2><p class="muted small">Les points ne sont modifiés qu\'à la validation, une seule fois. Le classement et l\'historique sont ensuite envoyés sur Discord.</p>' +
+  m.innerHTML = '<h2 style="margin-top:0">Clôturer l\'événement ?</h2><p class="muted small">Les points de la saison <b>' + E(S.ev.season) + '</b> ne sont modifiés qu\'à la validation, une seule fois. Le classement de cette saison et l\'historique sont ensuite mis à jour sur Discord.</p>' +
     (rows || '<p class="muted">Aucun membre à mettre à jour.</p>') + (ext ? '<p class="muted small">' + ext + ' externe' + (ext > 1 ? 's' : '') + ' : aucun point.</p>' : '') +
     '<div class="row sticky-foot"><button class="btn grow" id="c-no">Annuler</button><button class="btn on grow" id="c-ok">Appliquer</button></div>';
   m.querySelector('#c-no').onclick = G.closeModal;
@@ -491,8 +520,8 @@ async function openClose() {
       const res = await G.post('eventClose', { id: S.ev.id, participants: S.parts.map(clean) });
       S.dirty = false; S.stopped = true; clearTimeout(S.retry);
       try { localStorage.removeItem('gev:' + S.ev.id); localStorage.removeItem('g:pub'); localStorage.removeItem('g:hist'); localStorage.removeItem('g:raids'); } catch (e) {}
-      const note = res.discord === 'ok' ? '<p class="muted small">Classement et historique envoyés sur Discord.</p>' : /^erreur/.test(res.discord) ? '<p class="err small">Discord non mis à jour : ' + E(res.discord) + '</p>' : '';
-      m.innerHTML = '<h2 style="margin-top:0">Raid clôturé ✅</h2>' + res.summary.map(s => '<div class="mini"><b>' + E(s.key) + '</b><span>' + s.before.points + ' → <b class="gold">' + s.after.points + '</b>' + (s.after.hr !== s.before.hr ? ' · HR ' + s.before.hr + '→' + s.after.hr : '') + '</span></div>').join('') + note +
+      const note = res.discord === 'ok' ? '<p class="muted small">Classement ' + E(S.ev.season) + ' et historique mis à jour sur Discord.</p>' : /^erreur/.test(res.discord) ? '<p class="err small">Discord non mis à jour : ' + E(res.discord) + '</p>' : '';
+      m.innerHTML = '<h2 style="margin-top:0">Événement clôturé ✅ · ' + E(S.ev.season) + '</h2>' + res.summary.map(s => '<div class="mini"><b>' + E(s.key) + '</b><span>' + s.before.points + ' → <b class="gold">' + s.after.points + '</b>' + (s.after.hr !== s.before.hr ? ' · HR ' + s.before.hr + '→' + s.after.hr : '') + '</span></div>').join('') + note +
         '<button class="btn on" style="width:100%;margin-top:14px" id="c-done">Terminé</button>';
       m.querySelector('#c-done').onclick = () => { G.closeModal(); location.hash = ''; };
     } catch (e) { G.toast(G.errMsg(e), true); m.querySelector('#c-ok').disabled = false; }

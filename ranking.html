@@ -20,12 +20,13 @@
 const app = document.getElementById('app');
 const E = G.esc;
 G.nav('ranking.html');
-let pub = null, q = '', role = 'all';
+let pub = null, q = '', role = 'all', season = '';
 const open = {};            // historique individuel ouvert
 const cache = {};
 
 app.innerHTML = '<div class="pagehead"><div><h1>🎯 Classement SR</h1><p class="muted small" id="sub">Chargement…</p></div><button class="btn small" id="reload">↻ Actualiser</button></div>' +
-  '<input id="q" placeholder="Rechercher un personnage…" autocomplete="off">' +
+  '<div class="seasonbar" id="seasons"></div><div class="muted small" id="sraids"></div>' +
+  '<input id="q" placeholder="Rechercher un personnage…" autocomplete="off" style="margin-top:8px">' +
   '<div class="chips" id="chips" style="margin:10px 0"></div><div id="list"></div>';
 document.getElementById('q').oninput = ev => { q = ev.target.value; paint(); };
 document.getElementById('reload').onclick = () => load(true);
@@ -35,22 +36,31 @@ function chips() {
   document.getElementById('chips').innerHTML = f.map(c => '<button class="chip' + (role === c[0] ? ' on' : '') + '" data-r="' + c[0] + '">' + c[1] + '</button>').join('');
   document.querySelectorAll('[data-r]').forEach(b => b.onclick = () => { role = b.dataset.r; chips(); paint(); });
 }
+const pts = (m, sid) => (m.pts && m.pts[sid]) || { points: 0, hr: 0, hors: 0, last: '' };
+function seasonBar() {
+  const list = (pub && pub.seasons) || [];
+  document.getElementById('seasons').innerHTML = list.map(x => '<button class="chip' + (season === x.id ? ' on' : '') + '" data-s="' + E(x.id) + '">' + E(x.id) + (x.name && x.name !== x.id ? '<small>' + E(x.name) + '</small>' : '') + '</button>').join('');
+  document.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { season = b.dataset.s; try { localStorage.setItem('g:season', season); } catch (e) {} seasonBar(); paint(); });
+  const raids = ((pub && pub.instances) || []).filter(i => i.season === season).map(i => i.name);
+  document.getElementById('sraids').innerHTML = 'Points de la saison <b>' + E(season) + '</b> : ils comptent pour ' + (raids.length ? E(raids.join(', ')) : 'les raids à venir de cette saison') + '. Une saison ne se ferme jamais.';
+}
 function paint() {
   if (!pub) return;
   const R = pub.rules, nq = G.norm(q);
-  const all = pub.members.slice().sort((a, b) => b.points - a.points || a.key.localeCompare(b.key));
+  const all = pub.members.slice().sort((a, b) => pts(b, season).points - pts(a, season).points || a.key.localeCompare(b.key));
   document.getElementById('sub').textContent = '+' + R.bonus + ' points par raid sans SR obtenu · ' + R.threshold + ' points = HR · mis à jour ' + G.fmtWhen(pub.at.replace('T', ' ').slice(0, 16));
   const rows = all.map((m, i) => ({ m, pos: i + 1 })).filter(x => (role === 'all' || x.m.role === role) && (!nq || G.norm(x.m.key + ' ' + x.m.pseudo + ' ' + x.m.classe).indexOf(nq) !== -1));
   document.getElementById('list').innerHTML = rows.map(({ m, pos }) => {
-    const pct = Math.min(100, Math.round(m.points / R.threshold * 100));
-    let last = 'jamais';
-    if (m.last) { const days = Math.floor((Date.now() - new Date(m.last + 'T12:00:00').getTime()) / 86400000); last = G.fmtDay(m.last) + (days > R.inactiveDays ? ' ⚠ inactif' : ''); }
+    const v = pts(m, season);
+    const pct = Math.min(100, Math.round(v.points / R.threshold * 100));
+    let last = v.last ? G.fmtDay(v.last) : 'jamais';
+    if (m.last) { const days = Math.floor((Date.now() - new Date(m.last + 'T12:00:00').getTime()) / 86400000); if (days > R.inactiveDays) last += ' ⚠ inactif'; }
     const officer = G.isOfficer();
     return '<div class="card cc" style="--c:' + G.classColor(m.classe) + '"><div class="rk"><div class="pos">' + (pos <= 3 ? ['🥇', '🥈', '🥉'][pos - 1] : pos) + '</div>' +
       '<div><b>' + E(m.key) + '</b>' + (m.type === 'reroll' ? ' <span class="tag">🔁 reroll de ' + E(m.main) + '</span>' : '') + ' <span class="muted small">' + E([m.classe, m.spe].filter(Boolean).join(' ')) + ' ' + (G.ROLE[m.role] ? G.ROLE[m.role].emoji : '') + '</span></div>' +
-      '<div class="pts">' + m.points + '<span class="muted small"> pts</span></div>' +
+      '<div class="pts">' + v.points + '<span class="muted small"> pts</span></div>' +
       '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
-      '<div class="meta"><span>🎯 HR : <b>' + m.hr + '</b></span><span>Hors SR : <b>+' + m.hors + '</b></span><span>Dernier raid : ' + E(last) + '</span><span class="grow"></span>' +
+      '<div class="meta"><span>🎯 HR : <b>' + v.hr + '</b></span><span>Hors SR : <b>+' + v.hors + '</b></span><span>Dernier raid : ' + E(last) + '</span><span class="grow"></span>' +
       '<button class="btn small" data-h="' + E(m.key) + '">📜 ' + (open[m.key] ? 'Masquer' : 'Historique') + '</button>' +
       (officer ? '<button class="btn small" data-adj="' + E(m.key) + '">Corriger</button>' : '') + '</div></div>' +
       '<div id="h-' + E(m.key) + '"></div></div>';
@@ -67,20 +77,21 @@ async function toggleHist(key) {
 function showHist(key) {
   const el = document.getElementById('h-' + key);
   if (!el || !cache[key]) return;
-  el.innerHTML = '<div class="hist">' + (cache[key].map(e => '<div class="entry"><div class="row"><b class="grow">' + E(e.action) + '</b><span class="muted small">' + E(G.fmtWhen(e.when)) + '</span></div>' +
-    '<div class="muted small">' + E(e.raid) + ' · ' + E(e.before) + ' → ' + E(e.after) + '</div></div>').join('') || '<p class="muted small">Aucun mouvement pour le moment.</p>') + '</div>';
+  const list = cache[key].filter(e => e.season === season);
+  el.innerHTML = '<div class="hist">' + (list.map(e => '<div class="entry"><div class="row"><b class="grow">' + E(e.action) + '</b><span class="muted small">' + E(G.fmtWhen(e.when)) + '</span></div>' +
+    '<div class="muted small">' + E(e.raid) + ' · ' + E(e.before) + ' → ' + E(e.after) + '</div></div>').join('') || '<p class="muted small">Aucun mouvement dans la saison ' + E(season) + ' pour le moment.</p>') + '</div>';
 }
 async function adjust(key) {
-  const m = pub.members.find(x => x.key === key);
-  const el = G.modal('<h2 style="margin-top:0">Corriger · ' + E(key) + '</h2><p class="muted small">Correction manuelle : elle est enregistrée dans l\'historique et postée sur Discord.</p>' +
-    '<label>Points</label><input id="a-p" type="number" min="0" value="' + m.points + '"><label>HR en attente</label><input id="a-h" type="number" min="0" value="' + m.hr + '">' +
-    '<label>Loot hors SR (+N)</label><input id="a-o" type="number" min="0" value="' + m.hors + '">' +
+  const m = pub.members.find(x => x.key === key), v = pts(m, season);
+  const el = G.modal('<h2 style="margin-top:0">Corriger · ' + E(key) + ' <span class="tag season">' + E(season) + '</span></h2><p class="muted small">Correction manuelle des points de la saison <b>' + E(season) + '</b> uniquement : elle est enregistrée dans l\'historique et postée sur Discord.</p>' +
+    '<label>Points</label><input id="a-p" type="number" min="0" value="' + v.points + '"><label>HR en attente</label><input id="a-h" type="number" min="0" value="' + v.hr + '">' +
+    '<label>Loot hors SR (+N)</label><input id="a-o" type="number" min="0" value="' + v.hors + '">' +
     '<div class="row" style="margin-top:14px"><button class="btn grow" id="a-no">Annuler</button><button class="btn on grow" id="a-ok">Enregistrer</button></div>');
   el.querySelector('#a-no').onclick = G.closeModal;
   el.querySelector('#a-ok').onclick = async () => {
     el.querySelector('#a-ok').disabled = true;
     try {
-      const r = await G.post('adjust', { key, points: el.querySelector('#a-p').value, hr: el.querySelector('#a-h').value, hors: el.querySelector('#a-o').value });
+      const r = await G.post('adjust', { key, season, points: el.querySelector('#a-p').value, hr: el.querySelector('#a-h').value, hors: el.querySelector('#a-o').value });
       pub.members = r.members; delete cache[key]; try { localStorage.removeItem('g:pub'); localStorage.removeItem('g:hist'); } catch (e) {}
       G.closeModal(); paint();
       if (/^erreur/.test(r.discord)) G.toast('Discord : ' + r.discord, true);
@@ -90,7 +101,14 @@ async function adjust(key) {
 async function load(force) {
   try {
     if (force) { try { localStorage.removeItem('g:pub'); } catch (e) {} }
-    await G.swr('pub', () => G.get('public'), d => { pub = d; paint(); });
+    await G.swr('pub', () => G.get('public'), d => {
+      pub = d;
+      if (!season || !(d.seasons || []).some(x => x.id === season)) {
+        let saved = ''; try { saved = localStorage.getItem('g:season') || ''; } catch (e) {}
+        season = (d.seasons || []).some(x => x.id === saved) ? saved : d.defaultSeason;
+      }
+      seasonBar(); paint();
+    });
   } catch (e) { document.getElementById('list').innerHTML = '<div class="banner">' + E(G.errMsg(e)) + '</div>'; }
 }
 chips(); load();

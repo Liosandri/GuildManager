@@ -31,7 +31,7 @@ app.innerHTML =
   '<a class="tile" href="events.html"><div class="ico">⚔️</div><h3>Événements</h3><div class="stat" id="s-events">…</div></a>' +
   '<a class="tile" href="ranking.html"><div class="ico">🎯</div><h3>Classement SR</h3><div class="stat" id="s-rank">…</div></a>' +
   '<a class="tile" href="history.html"><div class="ico">📜</div><h3>Historique</h3><div class="stat" id="s-hist">…</div></a></div>' +
-  '<div class="two"><div class="card"><h3>🏆 En tête du classement</h3><div id="top" style="margin-top:6px"><span class="muted">Chargement…</span></div></div>' +
+  '<div class="two"><div class="card"><h3>🏆 En tête du classement <span class="tag season" id="topseason"></span></h3><div id="top" style="margin-top:6px"><span class="muted">Chargement…</span></div></div>' +
   '<div class="card"><h3>📜 Dernier raid</h3><div id="last" style="margin-top:6px"><span class="muted">Chargement…</span></div></div></div>' +
   '<div id="warn"></div>';
 
@@ -59,7 +59,8 @@ function paintPub() {
   document.getElementById('s-roster').textContent = m.length + ' membre' + (m.length > 1 ? 's' : '') + ' · 🛡️ ' + n('tank') + ' · 💚 ' + n('soigneur') + ' · ⚔️ ' + n('dps');
   const open = pub.raids.find(r => r.status === 'En cours'), closed = pub.raids.filter(r => r.status !== 'En cours');
   document.getElementById('s-events').textContent = open ? 'En cours : ' + open.name : closed.length ? 'Dernier : ' + closed[0].name + ' (' + G.fmtDay(closed[0].date) + ')' : 'Aucun raid';
-  const top = m.slice().sort((a, b) => b.points - a.points);
+  const top = m.slice().sort((a, b) => b.points - a.points);   // points de la saison la plus récente
+  document.getElementById('topseason').textContent = pub.defaultSeason || '';
   document.getElementById('s-rank').textContent = top.length && top[0].points ? 'N°1 : ' + top[0].key + ' · ' + top[0].points + ' pts' : 'Pas encore de points';
   document.getElementById('top').innerHTML = top.slice(0, 5).map((x, i) =>
     '<div class="mini"><span>' + ['🥇', '🥈', '🥉', '4.', '5.'][i] + ' <b style="color:' + G.classColor(x.classe) + '">' + E(x.key) + '</b></span><span class="gold"><b>' + x.points + '</b> pts' + (x.hr ? ' · 🎯' + x.hr : '') + '</span></div>').join('') || '<span class="muted">Aucun membre.</span>';

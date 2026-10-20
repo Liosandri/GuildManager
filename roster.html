@@ -118,7 +118,7 @@ function extras() {
     const a = isRe ? mf.original : pk, b = isRe ? mf.origMain : mf.original;
     html += '<div class="banner" style="margin-top:8px"><b>' + E(a) + '</b> devient le personnage principal (roster Discord) et <b>' + E(b) + '</b> passe reroll. Les points restent sur chaque personnage.</div><button class="btn on" id="x-go" style="width:100%;margin-top:8px">Confirmer l\'inversion</button>';
   } else if (pn === 'leave') {
-    let txt = 'Les points de <b>' + E(mf.original) + '</b> sont perdus et le personnage est retiré de l\'app.', pick = '';
+    let txt = 'Les points de <b>' + E(mf.original) + '</b> sont perdus (dans toutes les saisons) et le personnage est retiré de l\'app.', pick = '';
     if (!isRe && kids.length === 1) txt += ' <b>' + E(kids[0].key) + '</b> devient le personnage principal et garde ses points.';
     if (!isRe && kids.length > 1) {
       if (!mf.pick) mf.pick = kids[0].key;

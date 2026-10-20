@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raids et saisons · Guilde</title>
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=2">
+<meta name="theme-color" content="#050a14">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header id="nav"></header>
+<main class="wrap" id="app"></main>
+<script src="config.js"></script>
+<script src="assets/app.js"></script>
+<script>
+/* ============ Raids et saisons ============
+   Saison  : S01, S02… (jamais fermée). Les points, les HR et le classement Discord sont par saison.
+   Raid    : Molten Core… assigné à UNE saison. Un événement choisit un raid et hérite de sa saison. */
+const app = document.getElementById('app');
+const E = G.esc;
+G.nav('seasons.html');
+let D = null; // { seasons, instances, raids }
+
+app.innerHTML =
+  '<div class="pagehead"><div><h1>🗂️ Raids et saisons</h1><p class="muted small">Une saison regroupe des raids. Quand tu crées un événement, tu choisis le raid : les joueurs gagnent les points de sa saison.</p></div>' +
+  '<button class="btn small" id="reload">↻ Actualiser</button></div>' +
+  '<div class="card"><b>Nouveau raid</b><div class="row" style="margin-top:10px;flex-wrap:wrap"><input id="ni-name" class="grow" style="min-width:180px" placeholder="Nom du raid (ex. Molten Core)" autocomplete="off">' +
+  '<select id="ni-season" style="width:auto;min-width:130px"></select></div>' +
+  '<button class="btn on" id="ni-go" style="width:100%;margin-top:10px">Ajouter le raid</button></div>' +
+  '<div id="groups"></div>' +
+  '<div class="card" style="margin-top:16px"><b>Nouvelle saison</b><p class="muted small" style="margin:6px 0 0">Elle prend le numéro suivant tout seul (S02, S03…). Elle démarre à 0 point pour tout le monde, et son classement est posté automatiquement sur Discord. Les saisons précédentes restent intactes.</p>' +
+  '<div class="row" style="margin-top:10px;flex-wrap:wrap"><input id="ns-name" class="grow" style="min-width:180px" placeholder="Nom (facultatif, ex. Printemps)" autocomplete="off"></div>' +
+  '<button class="btn on" id="ns-go" style="width:100%;margin-top:10px">＋ Créer la prochaine saison</button></div>';
+
+document.getElementById('reload').onclick = () => load(true);
+document.getElementById('ni-go').onclick = addInstance;
+document.getElementById('ns-go').onclick = addSeason;
+
+const tag = id => '<span class="tag season">' + E(id) + '</span>';
+
+function paint() {
+  if (!D) return;
+  const sel = document.getElementById('ni-season');
+  const keep = sel.value;
+  sel.innerHTML = D.seasons.map(s => '<option value="' + E(s.id) + '">' + E(s.id) + (s.name && s.name !== s.id ? ' · ' + E(s.name) : '') + '</option>').join('');
+  sel.value = D.seasons.some(s => s.id === keep) ? keep : D.defaultSeason;
+
+  document.getElementById('groups').innerHTML = D.seasons.slice().reverse().map(s => {
+    const list = D.instances.filter(i => i.season === s.id);
+    return '<div class="card sgroup"><h3>' + tag(s.id) + ' <span class="grow">' + E(s.name) + '</span><button class="btn small" data-ren="' + E(s.id) + '">Renommer</button></h3>' +
+      (list.length ? list.map(i =>
+        '<div class="rrow"><b class="grow">' + E(i.name) + '</b>' +
+        '<span class="muted small">' + i.events + ' événement' + (i.events > 1 ? 's' : '') + '</span>' +
+        (i.events ? '<span class="tag" title="Des événements existent déjà : la saison est verrouillée">🔒</span>'
+          : '<select data-mv="' + E(i.name) + '">' + D.seasons.map(x => '<option value="' + E(x.id) + '"' + (x.id === s.id ? ' selected' : '') + '>' + E(x.id) + '</option>').join('') + '</select>' +
+            '<button class="btn small" data-del="' + E(i.name) + '" title="Supprimer" aria-label="Supprimer">🗑</button>') +
+        '</div>').join('') : '<p class="muted small" style="margin:4px 0 0">Aucun raid dans cette saison pour le moment.</p>') + '</div>';
+  }).join('');
+  document.querySelectorAll('[data-mv]').forEach(x => x.onchange = () => run('instanceSave', { name: x.dataset.mv, season: x.value }, 'Saison changée'));
+  document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+    const name = b.dataset.del;
+    const m = G.modal('<h2 style="margin-top:0">Supprimer ce raid ?</h2><p><b>' + E(name) + '</b> sera retiré de la liste. Il n\'a aucun événement, rien d\'autre n\'est touché.</p>' +
+      '<div class="row"><button class="btn grow" id="dl-no">Annuler</button><button class="btn on bad grow" id="dl-ok">Supprimer</button></div>');
+    m.querySelector('#dl-no').onclick = G.closeModal;
+    m.querySelector('#dl-ok').onclick = async () => { G.closeModal(); await run('instanceDelete', { name }, 'Raid supprimé'); };
+  });
+  document.querySelectorAll('[data-ren]').forEach(b => b.onclick = () => rename(b.dataset.ren));
+}
+
+async function run(action, payload, okMsg) {
+  try {
+    const r = await G.post(action, payload);
+    try { localStorage.removeItem('g:pub'); localStorage.removeItem('g:hist'); } catch (e) {}
+    if (okMsg) G.toast(okMsg);
+    if (r.discord && /^erreur/.test(r.discord)) G.toast('Discord : ' + r.discord, true);
+    await load(true);
+    return r;
+  } catch (e) { G.toast(G.errMsg(e), true); await load(true); }
+}
+
+async function addInstance() {
+  const name = document.getElementById('ni-name').value.trim();
+  if (!name) { G.toast('Donne un nom au raid.', true); return; }
+  const btn = document.getElementById('ni-go'); btn.disabled = true;
+  const r = await run('instanceSave', { name, season: document.getElementById('ni-season').value }, 'Raid ajouté');
+  if (r) document.getElementById('ni-name').value = '';
+  btn.disabled = false;
+}
+
+async function addSeason() {
+  const btn = document.getElementById('ns-go'); btn.disabled = true;
+  const r = await run('seasonCreate', { name: document.getElementById('ns-name').value }, 'Saison créée');
+  if (r) document.getElementById('ns-name').value = '';
+  btn.disabled = false;
+}
+
+function rename(id) {
+  const s = D.seasons.find(x => x.id === id);
+  const m = G.modal('<h2 style="margin-top:0">Renommer ' + E(id) + '</h2><input id="rn" value="' + E(s ? s.name : '') + '" autocomplete="off">' +
+    '<div class="row" style="margin-top:14px"><button class="btn grow" id="rn-no">Annuler</button><button class="btn on grow" id="rn-ok">Enregistrer</button></div>');
+  m.querySelector('#rn-no').onclick = G.closeModal;
+  m.querySelector('#rn-ok').onclick = async () => { const v = m.querySelector('#rn').value; G.closeModal(); await run('seasonRename', { id, name: v }, 'Saison renommée'); };
+}
+
+async function load(force) {
+  try {
+    if (force) { try { localStorage.removeItem('g:pub'); } catch (e) {} }
+    await G.swr('pub', () => G.get('public'), d => { D = d; paint(); });
+  } catch (e) { document.getElementById('groups').innerHTML = '<div class="banner">' + E(G.errMsg(e)) + '</div>'; }
+}
+load();
+</script>
+</body>
+</html>
