@@ -148,7 +148,7 @@ const G = (() => {
   /* ---------- navigation ---------- */
   const PAGES = [
     ['index.html', '🏰', 'Accueil'], ['roster.html', '👥', 'Roster'], ['events.html', '⚔️', 'Événements'],
-    ['ranking.html', '🎯', 'Classement'], ['history.html', '📜', 'Historique'],
+    ['ranking.html', '🎯', 'Classement'], ['history.html', '📜', 'Historique'], ['seasons.html', '🗂️', 'Saisons'],
   ];
   function nav(active) {
     const el = document.getElementById('nav');
@@ -216,7 +216,7 @@ const G = (() => {
   const pills = list => '<div class="pills">' + list.map(n => '<span class="pill">' + esc(n) + '</span>').join('') + '</div>';
   function groupHtml(g, i, open) {
     if (g.kind === 'correction') {
-      return '<div class="card corr"><div class="row"><b class="grow">🔧 Correction · ' + esc(g.key) + '</b><span class="muted small">' + esc(fmtWhen(g.when)) + '</span></div>' +
+      return '<div class="card corr"><div class="row"><b class="grow">🔧 Correction · ' + esc(g.key) + (g.season ? ' <span class="tag season">' + esc(g.season) + '</span>' : '') + '</b><span class="muted small">' + esc(fmtWhen(g.when)) + '</span></div>' +
         '<div class="muted small">' + esc(g.before) + ' → ' + esc(g.after) + '</div></div>';
     }
     let lines = '';
@@ -230,7 +230,7 @@ const G = (() => {
     const details = open ? '<div class="hist">' + g.entries.map(e =>
       '<div class="entry"><div class="row"><b class="grow">' + esc(e.key) + ' · ' + esc(e.action) + '</b><span class="muted small">' + esc(fmtWhen(e.when)) + '</span></div>' +
       '<div class="muted small">' + esc(e.before) + ' → ' + esc(e.after) + '</div></div>').join('') + '</div>' : '';
-    return '<div class="card gcard"><div class="row"><b class="grow">📅 ' + esc(g.name) + '</b><span class="muted small">' + esc(fmtDay(g.date)) + '</span></div>' +
+    return '<div class="card gcard"><div class="row"><b class="grow">📅 ' + esc(g.name) + (g.season ? ' <span class="tag season">' + esc(g.season) + '</span>' : '') + '</b><span class="muted small">' + esc(fmtDay(g.date)) + '</span></div>' +
       '<div class="muted small">' + g.count + ' joueur' + (g.count > 1 ? 's' : '') + ' · clôturé le ' + esc(fmtWhen(g.when)) + '</div>' + lines +
       '<div class="row" style="margin-top:10px"><span class="grow"></span><button class="btn small" data-g="' + i + '">' + (open ? 'Masquer les détails' : 'Détails') + '</button></div>' + details + '</div>';
   }
