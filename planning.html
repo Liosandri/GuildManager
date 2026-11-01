@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planning · Guilde</title>
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=2">
+<meta name="theme-color" content="#050a14">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header id="nav"></header>
+<main class="wrap" id="app"></main>
+<script src="config.js"></script>
+<script src="assets/app.js"></script>
+<script>
+/* ============ Planning ============
+   Une soirée = un message Discord avec les boutons Présent / Peut-être / Absent.
+   Les joueurs s'inscrivent en se connectant avec Discord ; les inscrits apparaissent ici et dans le message. */
+const app = document.getElementById('app');
+const E = G.esc;
+G.nav('planning.html');
+let PLANS = [], INST = [];
+
+const next = G.nextRaid();
+app.innerHTML =
+  '<div class="pagehead"><div><h1>🗓️ Planning</h1><p class="muted small">Crée une soirée : le message part sur Discord avec les boutons d\'inscription.</p></div>' +
+  '<button class="btn small" id="reload">↻ Actualiser</button></div>' +
+  '<div class="card"><b>Nouvelle soirée</b>' +
+  '<div class="row" style="margin-top:10px;flex-wrap:wrap"><input id="pl-title" class="grow" style="min-width:180px" placeholder="Titre (ex. Raid du mercredi)" autocomplete="off"></div>' +
+  '<div class="row" style="margin-top:10px;flex-wrap:wrap"><input id="pl-date" type="date" style="width:auto"><input id="pl-time" type="time" style="width:auto">' +
+  '<select id="pl-format" style="width:auto"><option value="10">Raid de 10</option><option value="20">Raid de 20</option><option value="40">Raid de 40</option></select>' +
+  '<select id="pl-inst" class="grow" style="min-width:150px"><option value="">Raid (facultatif)</option></select></div>' +
+  '<button class="btn on" id="pl-go" style="width:100%;margin-top:10px">Créer et poster sur Discord</button></div>' +
+  '<div id="list"></div>';
+
+if (next) {
+  document.getElementById('pl-date').value = G.isoDay(next.start);
+  document.getElementById('pl-time').value = next.time;
+  document.getElementById('pl-title').value = next.name || '';
+} else document.getElementById('pl-date').value = G.todayIso();
+
+document.getElementById('reload').onclick = () => load();
+document.getElementById('pl-go').onclick = create;
+
+function pills(list) { return list.length ? '<div class="pills">' + list.map(n => '<span class="pill">' + E(n) + '</span>').join('') + '</div>' : '<span class="muted small">—</span>'; }
+
+function paint() {
+  document.getElementById('pl-inst').innerHTML = '<option value="">Raid (facultatif)</option>' + INST.map(i => '<option>' + E(i.name) + '</option>').join('');
+  document.getElementById('list').innerHTML = PLANS.length ? PLANS.map(p =>
+    '<div class="card"><div class="row"><b class="grow">🗓️ ' + E(p.title) + '</b><span class="muted small">' + E(G.fmtDay(p.date)) + ' · ' + E(p.time) + '</span></div>' +
+    '<div class="muted small">Raid de ' + p.format + (p.instance ? ' · ' + E(p.instance) : '') + '</div>' +
+    '<div class="gl"><span class="gl-h">✅ Présents <span class="muted">(' + p.present.length + ')</span></span>' + pills(p.present) + '</div>' +
+    '<div class="gl"><span class="gl-h">❔ Peut-être <span class="muted">(' + p.maybe.length + ')</span></span>' + pills(p.maybe) + '</div>' +
+    '<div class="gl"><span class="gl-h">❌ Absents <span class="muted">(' + p.absent.length + ')</span></span>' + pills(p.absent) + '</div>' +
+    '<div class="row" style="margin-top:10px"><span class="grow"></span><button class="btn small" data-del="' + E(p.id) + '">🗑 Supprimer</button></div></div>').join('')
+    : '<p class="muted" style="margin-top:16px">Aucune soirée pour le moment.</p>';
+  document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => del(b.dataset.del));
+}
+
+async function create() {
+  const btn = document.getElementById('pl-go'); btn.disabled = true;
+  try {
+    const r = await G.post('planCreate', {
+      title: document.getElementById('pl-title').value, date: document.getElementById('pl-date').value, time: document.getElementById('pl-time').value,
+      format: document.getElementById('pl-format').value, instance: document.getElementById('pl-inst').value,
+    });
+    PLANS = r.plans; paint(); G.toast('Soirée postée sur Discord');
+  } catch (e) { G.toast(G.errMsg(e), true); }
+  btn.disabled = false;
+}
+
+function del(id) {
+  const p = PLANS.find(x => x.id === id);
+  const m = G.modal('<h2 style="margin-top:0">Supprimer cette soirée ?</h2><p><b>' + E(p ? p.title : '') + '</b> et ses inscriptions seront supprimées, et le message Discord retiré.</p>' +
+    '<div class="row"><button class="btn grow" id="dl-no">Annuler</button><button class="btn on bad grow" id="dl-ok">Supprimer</button></div>');
+  m.querySelector('#dl-no').onclick = G.closeModal;
+  m.querySelector('#dl-ok').onclick = async () => {
+    G.closeModal();
+    try { const r = await G.post('planDelete', { id }); PLANS = r.plans; paint(); G.toast('Soirée supprimée'); } catch (e) { G.toast(G.errMsg(e), true); }
+  };
+}
+
+async function load() {
+  try {
+    const [pl, pub] = await Promise.all([G.post('planList'), G.get('public')]);
+    PLANS = pl.plans; INST = pub.instances || []; paint();
+  } catch (e) { document.getElementById('list').innerHTML = '<div class="banner">' + E(G.errMsg(e)) + '</div>'; }
+}
+load();
+</script>
+</body>
+</html>
