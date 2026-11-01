@@ -22,7 +22,7 @@
 const app = document.getElementById('app');
 const E = G.esc;
 G.nav('planning.html');
-let PLANS = [], INST = [];
+let PLANS = [], INST = [], COMPOS = [];
 
 const next = G.nextRaid();
 app.innerHTML =
@@ -31,9 +31,10 @@ app.innerHTML =
   '<div class="card"><b>Nouvelle soirée</b>' +
   '<div class="row" style="margin-top:10px;flex-wrap:wrap"><input id="pl-title" class="grow" style="min-width:180px" placeholder="Titre (ex. Raid du mercredi)" autocomplete="off"></div>' +
   '<div class="row" style="margin-top:10px;flex-wrap:wrap"><input id="pl-date" type="date" style="width:auto"><input id="pl-time" type="time" style="width:auto">' +
-  '<select id="pl-format" style="width:auto"><option value="10">Raid de 10</option><option value="20">Raid de 20</option><option value="40">Raid de 40</option></select>' +
+  '<select id="pl-format" style="width:auto"></select>' +
   '<select id="pl-inst" class="grow" style="min-width:150px"><option value="">Raid (facultatif)</option></select></div>' +
   '<button class="btn on" id="pl-go" style="width:100%;margin-top:10px">Créer et poster sur Discord</button></div>' +
+  '<div class="card" style="margin-top:16px"><div class="row"><b class="grow">⚙️ Typologie des rosters</b><button class="btn small" id="ty-toggle">Modifier</button></div><div id="ty-sum" class="muted small" style="margin-top:6px"></div><div id="ty-edit" hidden></div></div>' +
   '<div id="list"></div></div><div id="compose" hidden></div>';
 
 if (next) {
@@ -47,7 +48,50 @@ document.getElementById('pl-go').onclick = create;
 
 function pills(list) { return list.length ? '<div class="pills">' + list.map(n => '<span class="pill">' + E(n) + '</span>').join('') + '</div>' : '<span class="muted small">—</span>'; }
 
+function tySummary() {
+  return COMPOS.map(c => '<b>' + c.format + '</b> : ' + c.tanks + ' tank' + (c.tanks > 1 ? 's' : '') + ', ' + c.heals + ' soigneur' + (c.heals > 1 ? 's' : '') + ', ' + c.dps + ' DPS').join('<br>');
+}
+function tyRow(c) {
+  return '<div class="row ty-row" style="margin-top:8px;flex-wrap:wrap;align-items:center">' +
+    '<label class="small muted">Raid de <input type="number" class="ty-f" min="2" max="40" style="width:70px" value="' + c.format + '"></label>' +
+    '<label class="small muted">Tanks <input type="number" class="ty-t" min="0" style="width:64px" value="' + c.tanks + '"></label>' +
+    '<label class="small muted">Soigneurs <input type="number" class="ty-h" min="0" style="width:64px" value="' + c.heals + '"></label>' +
+    '<span class="small ty-d grow"></span><button class="btn small ty-x" title="Retirer" aria-label="Retirer">🗑</button></div>';
+}
+function tyRefresh() {
+  document.querySelectorAll('.ty-row').forEach(r => {
+    const f = Number(r.querySelector('.ty-f').value) || 0, t = Number(r.querySelector('.ty-t').value) || 0, h = Number(r.querySelector('.ty-h').value) || 0;
+    const d = f - t - h, el = r.querySelector('.ty-d');
+    el.textContent = '= ' + d + ' DPS'; el.style.color = d < 0 ? '#ff8a8a' : '';
+  });
+}
+function tyOpen() {
+  const box = document.getElementById('ty-edit');
+  box.hidden = false; document.getElementById('ty-sum').hidden = true; document.getElementById('ty-toggle').hidden = true;
+  box.innerHTML = '<p class="muted small" style="margin:8px 0 0">Un roster est complet quand il atteint la taille du raid avec au moins ce nombre de tanks et de soigneurs. Le reste est du DPS. Tu peux ajouter n\'importe quel format (ex. 25).</p><div id="ty-rows">' + COMPOS.map(tyRow).join('') + '</div>' +
+    '<div class="row" style="margin-top:12px"><button class="btn small" id="ty-add">＋ Ajouter un format</button><span class="grow"></span><button class="btn small" id="ty-no">Annuler</button><button class="btn on small" id="ty-ok">Enregistrer</button></div>';
+  const wire = () => { box.querySelectorAll('input').forEach(i => i.oninput = tyRefresh); box.querySelectorAll('.ty-x').forEach(b => b.onclick = () => { b.closest('.ty-row').remove(); }); tyRefresh(); };
+  wire();
+  document.getElementById('ty-add').onclick = () => { document.getElementById('ty-rows').insertAdjacentHTML('beforeend', tyRow({ format: '', tanks: 1, heals: 2 })); wire(); };
+  document.getElementById('ty-no').onclick = tyClose;
+  document.getElementById('ty-ok').onclick = async () => {
+    const rows = [...box.querySelectorAll('.ty-row')].map(r => ({ format: r.querySelector('.ty-f').value, tanks: r.querySelector('.ty-t').value, heals: r.querySelector('.ty-h').value }));
+    const btn = document.getElementById('ty-ok'); btn.disabled = true;
+    try { const r = await G.post('compoSave', { rows }); COMPOS = r.compos; tyClose(); paint(); G.toast('Typologie enregistrée'); }
+    catch (e) { G.toast(G.errMsg(e), true); btn.disabled = false; }
+  };
+}
+function tyClose() {
+  document.getElementById('ty-edit').hidden = true; document.getElementById('ty-edit').innerHTML = '';
+  document.getElementById('ty-sum').hidden = false; document.getElementById('ty-toggle').hidden = false;
+}
+document.getElementById('ty-toggle').onclick = tyOpen;
+
 function paint() {
+  const fs = document.getElementById('pl-format'), keep = fs.value;
+  fs.innerHTML = COMPOS.map(c => '<option value="' + c.format + '">Raid de ' + c.format + '</option>').join('');
+  if (COMPOS.some(c => String(c.format) === keep)) fs.value = keep;
+  document.getElementById('ty-sum').innerHTML = tySummary();
   document.getElementById('pl-inst').innerHTML = '<option value="">Raid (facultatif)</option>' + INST.map(i => '<option>' + E(i.name) + '</option>').join('');
   document.getElementById('list').innerHTML = PLANS.length ? PLANS.map(p =>
     '<div class="card"><div class="row"><b class="grow">🗓️ ' + E(p.title) + '</b><span class="muted small">' + E(G.fmtDay(p.date)) + ' · ' + E(p.time) + '</span></div>' +
@@ -194,8 +238,8 @@ function publish() {
 
 async function load() {
   try {
-    const [pl, pub] = await Promise.all([G.post('planList'), G.get('public')]);
-    PLANS = pl.plans; INST = pub.instances || []; paint();
+    const [pl, pub, cp] = await Promise.all([G.post('planList'), G.get('public'), G.post('compoList')]);
+    PLANS = pl.plans; COMPOS = cp.compos; INST = pub.instances || []; paint();
   } catch (e) { document.getElementById('list').innerHTML = '<div class="banner">' + E(G.errMsg(e)) + '</div>'; }
 }
 load();
