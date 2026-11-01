@@ -148,7 +148,7 @@ const G = (() => {
   /* ---------- navigation ---------- */
   const PAGES = [
     ['index.html', '🏰', 'Accueil'], ['roster.html', '👥', 'Roster'], ['events.html', '⚔️', 'Événements'],
-    ['ranking.html', '🎯', 'Classement'], ['history.html', '📜', 'Historique'], ['planning.html', '🗓️', 'Planning'], ['seasons.html', '🗂️', 'Saisons'],
+    ['ranking.html', '🎯', 'Classement'], ['history.html', '📜', 'Historique'], ['seasons.html', '🗂️', 'Saisons'],
   ];
   function nav(active) {
     const el = document.getElementById('nav');
