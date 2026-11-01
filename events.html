@@ -246,6 +246,7 @@ function paintCompose() {
     groups + (V.groups.length || V.aside.length ? aside : '') +
     (V.groups.length ? '<button class="btn on" id="cp-pub" style="width:100%;margin-top:14px">✅ Valider et poster sur Discord (' + full + ' roster' + (full > 1 ? 's' : '') + ')</button>' +
       (p.published ? '<p class="muted small" style="text-align:center">Déjà posté : valider à nouveau remplace les messages.</p>' : '') : '') +
+    (Object.keys(V.events || {}).length && V.reserve && V.reserve.length ? '<div class="card" style="margin-top:12px"><b>🪑 Réserve de la soirée</b> <span class="muted small">(' + V.reserve.length + ')</span><div class="pills" style="margin-top:6px">' + V.reserve.map(chip).join('') + '</div><p class="muted small" style="margin:8px 0 0">Ils gardent ce statut toute la soirée. Pour remplacer un absent ou leur donner des points de SR : ouvre le raid, bouton « 🪑 Réserve ».</p></div>' : '') +
     (Object.keys(V.events || {}).length ? '<div class="card" style="margin-top:12px"><b>🎮 Rosters validés</b><p class="muted small" style="margin:4px 0 8px">Le soir du raid : ouvre le roster pour noter SR, HR et loots.</p><div class="row" style="flex-wrap:wrap">' +
       Object.keys(V.events).map(n => '<a class="btn on small" href="raid.html#/' + E(V.events[n]) + '">Ouvrir le raid · Roster ' + E(n) + '</a>').join('') + '</div></div>' : '');
   document.getElementById('cp-back').onclick = closeCompose;
