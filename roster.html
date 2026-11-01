@@ -49,6 +49,7 @@ function chips() {
   el.querySelectorAll('[data-r]').forEach(b => b.onclick = () => { role = b.dataset.r; chips(); paint(); });
 }
 
+const benchOf = m => { const v = pub && pub.bench ? pub.bench[G.norm(m.pseudo)] : undefined; return v === undefined ? null : v; };
 const kidsOf = key => (pub ? pub.members : []).filter(x => x.type === 'reroll' && x.main === key);
 function card(m) {
   const os = m.spe2 ? 'OS : ' + m.spe2 + (m.role2 ? ' ' + G.ROLE[m.role2].emoji : '') : '';
@@ -59,7 +60,7 @@ function card(m) {
     (kids.length ? '<span class="tag link soft">🔁 ' + (kids.length > 1 ? 'Rerolls' : 'Reroll') + ' : ' + E(kids.map(k => k.key).join(', ')) + '</span>' : '');
   return '<div class="mcard" style="--c:' + c + '"><div class="mc-head"><b class="mc-name">' + E(m.key) + '</b>' +
     (G.isOfficer() ? '<button class="btn small" data-edit="' + E(m.key) + '" aria-label="Modifier">✎</button>' : '') + '</div>' +
-    '<div class="mc-spec" style="color:' + c + '">' + E([m.classe, m.spe].filter(Boolean).join(' · ')) + (m.ilvl ? ' · ILVL ' + E(m.ilvl) : '') + ' ' + (G.ROLE[m.role] ? G.ROLE[m.role].emoji : '') + '</div>' +
+    '<div class="mc-spec" style="color:' + c + '">' + E([m.classe, m.spe].filter(Boolean).join(' · ')) + (m.ilvl ? ' · ILVL ' + E(m.ilvl) : '') + (benchOf(m) !== null ? ' · 🪑 ' + benchOf(m) : '') + ' ' + (G.ROLE[m.role] ? G.ROLE[m.role].emoji : '') + '</div>' +
     (meta ? '<div class="mc-meta">' + meta + '</div>' : '') +
     (chips ? '<div class="mc-chips">' + chips + '</div>' : '') + '</div>';
 }
