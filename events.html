@@ -37,7 +37,7 @@ app.innerHTML =
   '<button class="btn on" id="pl-go" style="width:100%;margin-top:10px">Créer et poster sur Discord</button></div>' +
   '<div class="card" style="margin-top:16px"><div class="row"><b class="grow">⚙️ Typologie des rosters</b><button class="btn small" id="ty-toggle">Modifier</button></div><div id="ty-sum" class="muted small" style="margin-top:6px"></div><div id="ty-edit" hidden></div></div>' +
   '<div class="card" style="margin-top:12px"><div class="row"><b class="grow">🪑 Points de bench</b><select id="bn-season" style="width:auto"></select><button class="btn small" id="bn-toggle">Voir</button></div>' +
-  '<p class="muted small" style="margin:6px 0 0">+1 à chaque passage en réserve. Moins de points = banc en premier, dans son rôle. Par saison, jamais remis à zéro.</p><div id="bn-list" hidden></div></div>' +
+  '<p class="muted small" style="margin:6px 0 0">+1 à chaque passage en réserve. Moins de points = banc en premier, dans son rôle. Par saison, jamais remis à zéro.</p><div id="bn-list" hidden></div><div class="row" id="bn-act" hidden style="margin-top:10px;flex-wrap:wrap"><button class="btn small on" id="bn-post">📣 Poster / mettre à jour sur Discord</button><span class="grow"></span><button class="btn small" id="bn-reset">Tout remettre à 0</button></div></div>' +
   '<div id="list"></div></div><div id="compose" hidden></div>';
 
 if (next) {
@@ -109,9 +109,23 @@ function paintBench() {
   });
 }
 document.getElementById('bn-season').onchange = e => loadBench(e.target.value);
+async function benchInit(reset) {
+  try {
+    BENCH = await G.post('benchInit', { season: BENCH && BENCH.season, reset });
+    paintBench();
+    G.toast(BENCH.discord === 'ok' ? 'Classement à jour sur Discord' : 'Discord : ' + BENCH.discord, BENCH.discord !== 'ok' && BENCH.discord !== 'off');
+  } catch (e) { G.toast(G.errMsg(e), true); }
+}
+document.getElementById('bn-post').onclick = () => benchInit(false);
+document.getElementById('bn-reset').onclick = () => {
+  const m = G.modal('<h2 style="margin-top:0">Tout remettre à 0 ?</h2><p>Les points de bench de <b>' + E(BENCH ? BENCH.season : '') + '</b> sont effacés pour tous les joueurs (historique de la saison compris), puis le classement est mis à jour sur Discord.</p>' +
+    '<div class="row"><button class="btn grow" id="rs-no">Annuler</button><button class="btn on bad grow" id="rs-ok">Remettre à 0</button></div>');
+  m.querySelector('#rs-no').onclick = G.closeModal;
+  m.querySelector('#rs-ok').onclick = async () => { G.closeModal(); await benchInit(true); };
+};
 document.getElementById('bn-toggle').onclick = () => {
   const l = document.getElementById('bn-list'), open = l.hidden;
-  l.hidden = !open; document.getElementById('bn-toggle').textContent = open ? 'Masquer' : 'Voir';
+  l.hidden = !open; document.getElementById('bn-act').hidden = !open; document.getElementById('bn-toggle').textContent = open ? 'Masquer' : 'Voir';
   if (open) loadBench();
 };
 
