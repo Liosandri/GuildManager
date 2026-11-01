@@ -87,7 +87,7 @@ function del(id) {
 /* ---------- composer les rosters ---------- */
 let CUR = null, V = null, timer = null, sig = '';
 const SLOTS = [['tank', '🛡️', 'Tanks'], ['soigneur', '🩹', 'Soigneurs'], ['cac', '⚔️', 'DPS mêlée'], ['dist', '🏹', 'DPS distance']];
-const chip = m => '<span class="pill" style="border-color:' + G.classColor(m.classe) + '">' + E(m.perso) + ' <span class="muted">' + E(m.spe || m.classe) + '</span></span>';
+const chip = m => '<span class="pill" style="border-color:' + G.classColor(m.classe) + (m.stale ? ';opacity:.6" title="ILVL non mis à jour depuis plus de 2 semaines' : '') + '">' + E(m.perso) + ' <span class="muted">' + E(m.spe || m.classe) + (m.ilvl ? ' · ' + E(m.ilvl) : '') + '</span></span>';
 
 function openCompose(id) {
   CUR = id; sig = '';
@@ -135,7 +135,7 @@ function paintCompose() {
   const groups = V.groups.map(g =>
     '<div class="card"><div class="row"><b class="grow">Roster ' + g.n + '</b>' +
     (g.complete ? '<span class="tag">✅ complet</span>' : '<span class="tag" style="color:#ffb4a8">⚠️ ' + E(g.missing.join(' · ')) + '</span>') + '</div>' +
-    '<div class="muted small">' + g.tanks + ' tank · ' + g.heals + ' soigneur · ' + g.cac + ' mêlée · ' + g.dist + ' distance</div>' +
+    '<div class="muted small">' + g.tanks + ' tank · ' + g.heals + ' soigneur · ' + g.cac + ' mêlée · ' + g.dist + ' distance' + (g.avg ? ' · ILVL moyen <b>' + g.avg + '</b>' : '') + '</div>' +
     g.members.map(m => memberRow(m, g.n)).join('') + '</div>').join('');
   const aside = '<div class="card"><b>🪑 Réserve</b> <span class="muted small">(' + V.aside.length + ')</span>' +
     (V.aside.length ? V.aside.map(m => memberRow(m, 0)).join('') : '<p class="muted small" style="margin:4px 0 0">Personne.</p>') + '</div>';

@@ -59,7 +59,7 @@ function card(m) {
     (kids.length ? '<span class="tag link soft">🔁 ' + (kids.length > 1 ? 'Rerolls' : 'Reroll') + ' : ' + E(kids.map(k => k.key).join(', ')) + '</span>' : '');
   return '<div class="mcard" style="--c:' + c + '"><div class="mc-head"><b class="mc-name">' + E(m.key) + '</b>' +
     (G.isOfficer() ? '<button class="btn small" data-edit="' + E(m.key) + '" aria-label="Modifier">✎</button>' : '') + '</div>' +
-    '<div class="mc-spec" style="color:' + c + '">' + E([m.classe, m.spe].filter(Boolean).join(' · ')) + ' ' + (G.ROLE[m.role] ? G.ROLE[m.role].emoji : '') + '</div>' +
+    '<div class="mc-spec" style="color:' + c + '">' + E([m.classe, m.spe].filter(Boolean).join(' · ')) + (m.ilvl ? ' · ILVL ' + E(m.ilvl) : '') + ' ' + (G.ROLE[m.role] ? G.ROLE[m.role].emoji : '') + '</div>' +
     (meta ? '<div class="mc-meta">' + meta + '</div>' : '') +
     (chips ? '<div class="mc-chips">' + chips + '</div>' : '') + '</div>';
 }
@@ -93,8 +93,8 @@ function paint() {
 const mf = {};
 function memberForm(key) {
   const m = key ? pub.members.find(x => x.key === key) : null;
-  Object.assign(mf, m ? { original: m.key, pseudo: m.pseudo, perso: m.key, classe: m.classe, spe: m.spe, role: m.role, spe2: m.spe2, role2: m.role2, statut: m.statut, type: m.type || 'principal', main: m.main || '', origType: m.type || 'principal', origMain: m.main || '', panel: '', pick: '' }
-    : { original: '', pseudo: '', perso: '', classe: '', spe: '', role: '', spe2: '', role2: '', statut: 'Titulaire', type: 'principal', main: '', origType: 'principal', origMain: '', panel: '', pick: '' });
+  Object.assign(mf, m ? { original: m.key, pseudo: m.pseudo, perso: m.key, classe: m.classe, spe: m.spe, role: m.role, spe2: m.spe2, role2: m.role2, statut: m.statut, ilvl: m.ilvl ? String(m.ilvl) : '', type: m.type || 'principal', main: m.main || '', origType: m.type || 'principal', origMain: m.main || '', panel: '', pick: '' }
+    : { original: '', pseudo: '', perso: '', classe: '', spe: '', role: '', spe2: '', role2: '', statut: 'Titulaire', ilvl: '', type: 'principal', main: '', origType: 'principal', origMain: '', panel: '', pick: '' });
   renderForm();
 }
 const chipsRole = f => '<div class="roles">' + ['tank', 'soigneur', 'dps'].map(r => '<button class="chip' + (mf[f] === r ? ' on' : '') + '" data-role="' + f + ':' + r + '">' + G.ROLE[r].emoji + ' ' + G.ROLE[r].one + '</button>').join('') + '</div>';
@@ -139,6 +139,7 @@ function renderForm() {
     '<label>Classe</label><select data-sel="classe">' + opts(Object.keys(catalog), mf.classe, 'Choisir…') + '</select>' +
     '<label>Spé principale</label><select data-sel="spe"' + (mf.classe ? '' : ' disabled') + '>' + opts(specs, mf.spe, 'Choisir…') + '</select>' + (mf.spe ? chipsRole('role') : '') +
     '<label>Spé secondaire (facultatif)</label><select data-sel="spe2"' + (mf.classe ? '' : ' disabled') + '>' + opts(specs, mf.spe2, 'Aucune') + '</select>' + (mf.spe2 ? chipsRole('role2') : '') +
+    '<label>ILVL (facultatif, saisi à la main)</label><input data-in="ilvl" type="number" inputmode="decimal" min="0" step="any" value="' + E(mf.ilvl) + '" autocomplete="off" placeholder="ex. 62">' +
     '<label>Statut</label><select data-sel="statut">' + ['Titulaire', 'Remplaçant', 'Essai'].map(t => '<option' + (t === mf.statut ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>' +
     '<div class="err" id="f-err"></div><div class="row" style="margin-top:8px"><button class="btn grow" id="f-no">Annuler</button><button class="btn on grow" id="f-ok">' + (edit ? 'Enregistrer' : 'Ajouter au roster') + '</button></div>' + (edit ? extras() : ''));
   el.querySelector('#f-no').onclick = G.closeModal;
