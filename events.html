@@ -12,7 +12,7 @@
 </head>
 <body>
 <header id="nav"></header>
-<style>.when{font-size:17px;line-height:1.35}.when .gold{font-weight:700;margin-left:6px;white-space:nowrap}</style>
+<style>.gcross{color:#46c768;font-weight:900}.when{font-size:17px;line-height:1.35}.when .gold{font-weight:700;margin-left:6px;white-space:nowrap}</style>
 <main class="wrap" id="app"></main>
 <script src="config.js"></script>
 <script src="assets/app.js"></script>
@@ -173,10 +173,12 @@ function del(id) {
 
 /* ---------- composer les rosters ---------- */
 let CUR = null, V = null, timer = null, sig = '';
-const SLOTS = [['tank', '🛡️', 'Tanks'], ['soigneur', '🩹', 'Soigneurs'], ['cac', '⚔️', 'DPS mêlée'], ['dist', '🏹', 'DPS distance']];
-const RICON = { tank: '🛡️', soigneur: '🩹', dps: '⚔️' };
-const chip = m => '<span class="pill" style="border-color:' + G.classColor(m.classe) + (m.stale ? ';opacity:.6" title="ILVL non mis à jour depuis plus de 2 semaines' : '') + '">' + E(m.perso) + ' <span class="muted">' + E(m.spe || m.classe) +
-  (m.spe2 && !m.alt ? ' / ' + RICON[m.role2] + ' ' + E(m.spe2) : '') + (m.alt ? ' (2e spé)' : '') + (m.ilvl ? ' · ' + E(m.ilvl) : '') + ' · 🪑' + (m.bench || 0) + '</span></span>';
+const CROSS = '<span class="gcross">✚</span>';
+const ICON = { tank: '🛡️', soigneur: CROSS, cac: '⚔️', dist: '🏹' };
+const SLOTS = [['tank', ICON.tank, 'Tanks'], ['soigneur', ICON.soigneur, 'Soigneurs'], ['cac', ICON.cac, 'DPS mêlée'], ['dist', ICON.dist, 'DPS distance']];
+const RICON = { tank: ICON.tank, soigneur: ICON.soigneur, dps: ICON.cac };
+const chip = m => '<span class="pill" style="border-color:' + G.classColor(m.classe) + (m.stale ? ';opacity:.6" title="ILVL non mis à jour depuis plus de 2 semaines' : '') + '">' + E(m.perso) + ' <span class="muted">' + (ICON[m.slot] || '') + ' ' + E(m.spe || m.classe) +
+  (m.spe2 && !m.alt ? ' / ' + (ICON[m.slot2] || '') + ' ' + E(m.spe2) : '') + (m.alt ? ' (2e spé)' : '') + (m.ilvl ? ' · ' + E(m.ilvl) : '') + ' · 🪑' + (m.bench || 0) + '</span></span>';
 
 function openCompose(id) {
   CUR = id; sig = '';
@@ -214,7 +216,7 @@ function targetOptions(cur) {
 }
 
 function memberRow(m, cur) {
-  const alt = m.spe2 ? '<button class="btn small" data-alt="' + E(m.perso) + '" data-to="' + (m.alt ? '0' : '1') + '" title="Change le rôle joué ce soir">↔ ' + (m.alt ? E(m.speMain) + ' ' + RICON[m.roleMain] : E(m.spe2) + ' ' + RICON[m.role2]) + '</button>' : '';
+  const alt = m.spe2 ? '<button class="btn small" data-alt="' + E(m.perso) + '" data-to="' + (m.alt ? '0' : '1') + '" title="Change le rôle joué ce soir">↔ ' + (m.alt ? (ICON[m.slotMain] || '') + ' ' + E(m.speMain) : (ICON[m.slot2] || '') + ' ' + E(m.spe2)) + '</button>' : '';
   return '<div class="rrow"><span class="grow">' + chip(m) + '</span>' + alt + '<select data-mv="' + E(m.perso) + '" aria-label="Déplacer ' + E(m.perso) + '">' + targetOptions(cur) + '</select></div>';
 }
 
