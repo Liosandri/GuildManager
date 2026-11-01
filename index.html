@@ -48,7 +48,7 @@ function nextCard() {
     html += '<div class="when">' + E(day) + ' · ' + E(nx.time) + '</div><div class="muted">Prochain raid · ' + E(nx.name) + ' (premier pull ' + E(nx.time) + ')</div>';
   } else html += '<div class="muted">Aucun raid planifié (voir config.js).</div>';
   const link = open
-    ? '<a class="btn on" href="events.html#/' + E(open.id) + '">Ouvrir « ' + E(open.name) + ' » (en cours)</a>'
+    ? '<a class="btn on" href="raid.html#/' + E(open.id) + '">Ouvrir « ' + E(open.name) + ' » (en cours)</a>'
     : '<a class="btn" href="events.html">Créer l\'événement</a>';
   document.getElementById('next').innerHTML = '<div class="card next"><div class="grow">' + html + '</div>' + (G.isOfficer() ? link : '') + '</div>';
 }
