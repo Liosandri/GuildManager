@@ -26,7 +26,7 @@ let PLANS = [], INST = [];
 
 const next = G.nextRaid();
 app.innerHTML =
-  '<div class="pagehead"><div><h1>🗓️ Planning</h1><p class="muted small">Crée une soirée : le message part sur Discord avec les boutons d\'inscription.</p></div>' +
+  '<div id="main"><div class="pagehead"><div><h1>🗓️ Planning</h1><p class="muted small">Crée une soirée : le message part sur Discord avec les boutons d\'inscription.</p></div>' +
   '<button class="btn small" id="reload">↻ Actualiser</button></div>' +
   '<div class="card"><b>Nouvelle soirée</b>' +
   '<div class="row" style="margin-top:10px;flex-wrap:wrap"><input id="pl-title" class="grow" style="min-width:180px" placeholder="Titre (ex. Raid du mercredi)" autocomplete="off"></div>' +
@@ -34,7 +34,7 @@ app.innerHTML =
   '<select id="pl-format" style="width:auto"><option value="10">Raid de 10</option><option value="20">Raid de 20</option><option value="40">Raid de 40</option></select>' +
   '<select id="pl-inst" class="grow" style="min-width:150px"><option value="">Raid (facultatif)</option></select></div>' +
   '<button class="btn on" id="pl-go" style="width:100%;margin-top:10px">Créer et poster sur Discord</button></div>' +
-  '<div id="list"></div>';
+  '<div id="list"></div></div><div id="compose" hidden></div>';
 
 if (next) {
   document.getElementById('pl-date').value = G.isoDay(next.start);
@@ -55,9 +55,10 @@ function paint() {
     '<div class="gl"><span class="gl-h">✅ Présents <span class="muted">(' + p.present.length + ')</span></span>' + pills(p.present) + '</div>' +
     '<div class="gl"><span class="gl-h">❔ Peut-être <span class="muted">(' + p.maybe.length + ')</span></span>' + pills(p.maybe) + '</div>' +
     '<div class="gl"><span class="gl-h">❌ Absents <span class="muted">(' + p.absent.length + ')</span></span>' + pills(p.absent) + '</div>' +
-    '<div class="row" style="margin-top:10px"><span class="grow"></span><button class="btn small" data-del="' + E(p.id) + '">🗑 Supprimer</button></div></div>').join('')
+    '<div class="row" style="margin-top:10px"><button class="btn on small" data-compose="' + E(p.id) + '">🧩 Composer les rosters</button><span class="grow"></span><button class="btn small" data-del="' + E(p.id) + '">🗑 Supprimer</button></div></div>').join('')
     : '<p class="muted" style="margin-top:16px">Aucune soirée pour le moment.</p>';
   document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => del(b.dataset.del));
+  document.querySelectorAll('[data-compose]').forEach(b => b.onclick = () => openCompose(b.dataset.compose));
 }
 
 async function create() {
@@ -80,6 +81,105 @@ function del(id) {
   m.querySelector('#dl-ok').onclick = async () => {
     G.closeModal();
     try { const r = await G.post('planDelete', { id }); PLANS = r.plans; paint(); G.toast('Soirée supprimée'); } catch (e) { G.toast(G.errMsg(e), true); }
+  };
+}
+
+/* ---------- composer les rosters ---------- */
+let CUR = null, V = null, timer = null, sig = '';
+const SLOTS = [['tank', '🛡️', 'Tanks'], ['soigneur', '🩹', 'Soigneurs'], ['cac', '⚔️', 'DPS mêlée'], ['dist', '🏹', 'DPS distance']];
+const chip = m => '<span class="pill" style="border-color:' + G.classColor(m.classe) + '">' + E(m.perso) + ' <span class="muted">' + E(m.spe || m.classe) + '</span></span>';
+
+function openCompose(id) {
+  CUR = id; sig = '';
+  document.getElementById('main').hidden = true;
+  const c = document.getElementById('compose'); c.hidden = false;
+  c.innerHTML = '<div class="muted">Chargement…</div>';
+  refreshView(true);
+  clearInterval(timer);
+  timer = setInterval(() => { if (document.visibilityState === 'visible') refreshView(false); }, 10000);
+}
+
+function closeCompose() {
+  clearInterval(timer); CUR = null; V = null;
+  document.getElementById('compose').hidden = true; document.getElementById('main').hidden = false; load();
+}
+
+async function refreshView(force) {
+  if (!CUR) return;
+  try { applyView(await G.post('planView', { id: CUR }), force); }
+  catch (e) { if (force) document.getElementById('compose').innerHTML = '<div class="banner">' + E(G.errMsg(e)) + '</div>'; }
+}
+
+function applyView(v, force) {
+  V = v;
+  const s = JSON.stringify(v);
+  if (!force && s === sig) return;
+  if (!force && document.activeElement && document.activeElement.tagName === 'SELECT') return; // ne pas gêner un choix en cours
+  sig = s; paintCompose();
+}
+
+function targetOptions(cur) {
+  let o = '<option value="0"' + (cur === 0 ? ' selected' : '') + '>Réserve</option>';
+  for (let i = 1; i <= Math.max(V.maxGroup, 1); i++) o += '<option value="' + i + '"' + (cur === i ? ' selected' : '') + '>Roster ' + i + '</option>';
+  return o;
+}
+
+function memberRow(m, cur) {
+  return '<div class="rrow"><span class="grow">' + chip(m) + '</span><select data-mv="' + E(m.perso) + '" aria-label="Déplacer ' + E(m.perso) + '">' + targetOptions(cur) + '</select></div>';
+}
+
+function paintCompose() {
+  const p = V.plan, t = V.typology, r = V.registered;
+  const cols = SLOTS.map(([k, ic, name]) => '<div class="gl"><span class="gl-h">' + ic + ' ' + name + ' <span class="muted">(' + r[k].length + ')</span></span><div class="pills">' +
+    (r[k].length ? r[k].map(chip).join('') : '<span class="muted small">—</span>') + '</div></div>').join('');
+  const groups = V.groups.map(g =>
+    '<div class="card"><div class="row"><b class="grow">Roster ' + g.n + '</b>' +
+    (g.complete ? '<span class="tag">✅ complet</span>' : '<span class="tag" style="color:#ffb4a8">⚠️ ' + E(g.missing.join(' · ')) + '</span>') + '</div>' +
+    '<div class="muted small">' + g.tanks + ' tank · ' + g.heals + ' soigneur · ' + g.cac + ' mêlée · ' + g.dist + ' distance</div>' +
+    g.members.map(m => memberRow(m, g.n)).join('') + '</div>').join('');
+  const aside = '<div class="card"><b>🪑 Réserve</b> <span class="muted small">(' + V.aside.length + ')</span>' +
+    (V.aside.length ? V.aside.map(m => memberRow(m, 0)).join('') : '<p class="muted small" style="margin:4px 0 0">Personne.</p>') + '</div>';
+  const full = V.groups.filter(g => g.complete).length;
+  document.getElementById('compose').innerHTML =
+    '<div class="pagehead"><div><h1>🧩 ' + E(p.title) + '</h1><p class="muted small">' + E(G.fmtDay(p.date)) + ' · ' + E(p.time) + ' · raid de ' + p.format +
+    ' — un roster complet = ' + t.tanks + ' tanks, ' + t.heals + ' soigneurs, ' + t.dps + ' DPS</p></div><button class="btn small" id="cp-back">← Retour</button></div>' +
+    '<div class="card"><div class="row"><b class="grow">👥 Inscrits « présent » en direct <span class="muted">(' + SLOTS.reduce((n, x) => n + r[x[0]].length, 0) + ')</span></b><span class="muted small">mis à jour toutes les 10 s</span></div>' + cols +
+    '<div class="muted small" style="margin-top:10px">❔ Peut-être : ' + (r.maybe.length ? E(r.maybe.map(m => m.perso).join(', ')) : '—') + ' · ❌ Absents : ' + (r.absent.length ? E(r.absent.map(m => m.perso).join(', ')) : '—') + '</div></div>' +
+    '<div class="card" style="margin-top:12px"><div class="row" style="flex-wrap:wrap"><span class="grow muted small">' +
+    (V.possible ? 'Avec les inscrits actuels, on peut faire <b>' + V.possible + '</b> roster' + (V.possible > 1 ? 's' : '') + ' complet' + (V.possible > 1 ? 's' : '') + '.' : 'Pas assez d\'inscrits pour un roster complet.') +
+    '</span><button class="btn on" id="cp-gen">⚙️ ' + (V.groups.length ? 'Régénérer' : 'Générer') + ' les rosters</button></div>' +
+    (V.groups.length ? '<p class="muted small" style="margin:8px 0 0">Régénérer remplace tes modifications.</p>' : '') + '</div>' +
+    groups + (V.groups.length || V.aside.length ? aside : '') +
+    (V.groups.length ? '<button class="btn on" id="cp-pub" style="width:100%;margin-top:14px">✅ Valider et poster sur Discord (' + full + ' roster' + (full > 1 ? 's' : '') + ')</button>' +
+      (p.published ? '<p class="muted small" style="text-align:center">Déjà posté : valider à nouveau remplace les messages.</p>' : '') : '');
+  document.getElementById('cp-back').onclick = closeCompose;
+  document.getElementById('cp-gen').onclick = generate;
+  const pub = document.getElementById('cp-pub'); if (pub) pub.onclick = publish;
+  document.querySelectorAll('#compose [data-mv]').forEach(sel => sel.onchange = () => move(sel.dataset.mv, sel.value));
+}
+
+async function generate() {
+  if (V.groups.length && !confirm('Régénérer remplace les modifications faites à la main. Continuer ?')) return;
+  try { applyView(await G.post('planGenerate', { id: CUR }), true); G.toast('Rosters générés'); } catch (e) { G.toast(G.errMsg(e), true); }
+}
+
+async function move(perso, group) {
+  try { applyView(await G.post('planMove', { id: CUR, perso, group: Number(group) }), true); } catch (e) { G.toast(G.errMsg(e), true); refreshView(true); }
+}
+
+function publish() {
+  const full = V.groups.filter(g => g.complete), bad = V.groups.filter(g => !g.complete);
+  if (!full.length) { G.toast('Aucun roster complet à poster.', true); return; }
+  const m = G.modal('<h2 style="margin-top:0">Poster sur Discord ?</h2><p>' + full.length + ' roster' + (full.length > 1 ? 's' : '') + ' complet' + (full.length > 1 ? 's' : '') + ' (' + full.map(g => g.n).join(', ') + ') ' +
+    (full.length > 1 ? 'seront postés' : 'sera posté') + ', un message chacun.</p>' +
+    (bad.length ? '<p>⚠️ Non postés car incomplets : roster ' + bad.map(g => g.n).join(', ') + '. Leurs joueurs iront en réserve.</p>' : '') +
+    '<p class="muted small">Un message « Réserve » est aussi posté s\'il reste des joueurs.</p>' +
+    '<div class="row"><button class="btn grow" id="pb-no">Annuler</button><button class="btn on grow" id="pb-ok">Poster</button></div>');
+  m.querySelector('#pb-no').onclick = G.closeModal;
+  m.querySelector('#pb-ok').onclick = async () => {
+    m.querySelector('#pb-ok').disabled = true;
+    try { const r = await G.post('planPublish', { id: CUR }); G.closeModal(); applyView(r.view, true); G.toast(r.posted.length + ' roster(s) posté(s) sur Discord'); }
+    catch (e) { G.closeModal(); G.toast(G.errMsg(e), true); }
   };
 }
 
