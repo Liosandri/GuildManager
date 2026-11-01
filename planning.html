@@ -26,7 +26,7 @@ let PLANS = [], INST = [];
 
 const next = G.nextRaid();
 app.innerHTML =
-  '<div id="main"><div class="pagehead"><div><h1>🗓️ Planning</h1><p class="muted small">Crée une soirée : le message part sur Discord avec les boutons d\'inscription.</p></div>' +
+  '<div id="main"><div class="pagehead"><div><h1>🗓️ Planning</h1><p class="muted small">Crée une soirée : le message part sur Discord avec les boutons d\'inscription. Pour le loot : <a href="https://softres.it/" target="_blank" rel="noopener">softres.it</a> (un raid par roster).</p></div>' +
   '<button class="btn small" id="reload">↻ Actualiser</button></div>' +
   '<div class="card"><b>Nouvelle soirée</b>' +
   '<div class="row" style="margin-top:10px;flex-wrap:wrap"><input id="pl-title" class="grow" style="min-width:180px" placeholder="Titre (ex. Raid du mercredi)" autocomplete="off"></div>' +
@@ -114,7 +114,7 @@ function applyView(v, force) {
   V = v;
   const s = JSON.stringify(v);
   if (!force && s === sig) return;
-  if (!force && document.activeElement && document.activeElement.tagName === 'SELECT') return; // ne pas gêner un choix en cours
+  if (!force && document.activeElement && (document.activeElement.tagName === 'SELECT' || document.activeElement.tagName === 'INPUT')) return; // ne pas gêner un choix en cours
   sig = s; paintCompose();
 }
 
@@ -136,6 +136,7 @@ function paintCompose() {
     '<div class="card"><div class="row"><b class="grow">Roster ' + g.n + '</b>' +
     (g.complete ? '<span class="tag">✅ complet</span>' : '<span class="tag" style="color:#ffb4a8">⚠️ ' + E(g.missing.join(' · ')) + '</span>') + '</div>' +
     '<div class="muted small">' + g.tanks + ' tank · ' + g.heals + ' soigneur · ' + g.cac + ' mêlée · ' + g.dist + ' distance' + (g.avg ? ' · ILVL moyen <b>' + g.avg + '</b>' : '') + '</div>' +
+    '<div class="row" style="margin-top:8px;flex-wrap:wrap"><input class="grow" style="min-width:200px" data-sr="' + g.n + '" value="' + E(g.sr || '') + '" placeholder="Lien softres.it du raid (facultatif)" autocomplete="off"><button class="btn small" data-srsave="' + g.n + '">🎯 Enregistrer</button></div>' +
     g.members.map(m => memberRow(m, g.n)).join('') + '</div>').join('');
   const aside = '<div class="card"><b>🪑 Réserve</b> <span class="muted small">(' + V.aside.length + ')</span>' +
     (V.aside.length ? V.aside.map(m => memberRow(m, 0)).join('') : '<p class="muted small" style="margin:4px 0 0">Personne.</p>') + '</div>';
@@ -143,6 +144,7 @@ function paintCompose() {
   document.getElementById('compose').innerHTML =
     '<div class="pagehead"><div><h1>🧩 ' + E(p.title) + '</h1><p class="muted small">' + E(G.fmtDay(p.date)) + ' · ' + E(p.time) + ' · raid de ' + p.format +
     ' — un roster complet = ' + t.tanks + ' tanks, ' + t.heals + ' soigneurs, ' + t.dps + ' DPS</p></div><button class="btn small" id="cp-back">← Retour</button></div>' +
+    '<div class="banner" style="margin-bottom:12px">🎯 <b>Avant de valider les rosters :</b> crée un raid de soft-res par roster sur <a href="https://softres.it/" target="_blank" rel="noopener"><b>softres.it</b></a>, puis colle le lien de chaque raid dans la carte du roster correspondant (champ « Lien softres.it »). Il sera ajouté au message Discord.</div>' +
     '<div class="card"><div class="row"><b class="grow">👥 Inscrits « présent » en direct <span class="muted">(' + SLOTS.reduce((n, x) => n + r[x[0]].length, 0) + ')</span></b><span class="muted small">mis à jour toutes les 10 s</span></div>' + cols +
     '<div class="muted small" style="margin-top:10px">❔ Peut-être : ' + (r.maybe.length ? E(r.maybe.map(m => m.perso).join(', ')) : '—') + ' · ❌ Absents : ' + (r.absent.length ? E(r.absent.map(m => m.perso).join(', ')) : '—') + '</div></div>' +
     '<div class="card" style="margin-top:12px"><div class="row" style="flex-wrap:wrap"><span class="grow muted small">' +
@@ -155,7 +157,13 @@ function paintCompose() {
   document.getElementById('cp-back').onclick = closeCompose;
   document.getElementById('cp-gen').onclick = generate;
   const pub = document.getElementById('cp-pub'); if (pub) pub.onclick = publish;
+  document.querySelectorAll('#compose [data-srsave]').forEach(b => b.onclick = () => saveSr(b.dataset.srsave));
   document.querySelectorAll('#compose [data-mv]').forEach(sel => sel.onchange = () => move(sel.dataset.mv, sel.value));
+}
+
+async function saveSr(n) {
+  const url = document.querySelector('#compose [data-sr="' + n + '"]').value;
+  try { applyView(await G.post('planSetSr', { id: CUR, group: Number(n), url }), true); G.toast(url.trim() ? 'Lien enregistré' : 'Lien retiré'); } catch (e) { G.toast(G.errMsg(e), true); }
 }
 
 async function generate() {
@@ -173,6 +181,7 @@ function publish() {
   const m = G.modal('<h2 style="margin-top:0">Poster sur Discord ?</h2><p>' + full.length + ' roster' + (full.length > 1 ? 's' : '') + ' complet' + (full.length > 1 ? 's' : '') + ' (' + full.map(g => g.n).join(', ') + ') ' +
     (full.length > 1 ? 'seront postés' : 'sera posté') + ', un message chacun.</p>' +
     (bad.length ? '<p>⚠️ Non postés car incomplets : roster ' + bad.map(g => g.n).join(', ') + '. Leurs joueurs iront en réserve.</p>' : '') +
+    (full.some(g => !g.sr) ? '<p>🎯 <b>Pas de lien softres.it</b> pour le roster ' + full.filter(g => !g.sr).map(g => g.n).join(', ') + '. Tu peux poster quand même, mais les joueurs n\'auront pas le lien de réservation.</p>' : '') +
     '<p class="muted small">Un message « Réserve » est aussi posté s\'il reste des joueurs.</p>' +
     '<div class="row"><button class="btn grow" id="pb-no">Annuler</button><button class="btn on grow" id="pb-ok">Poster</button></div>');
   m.querySelector('#pb-no').onclick = G.closeModal;
