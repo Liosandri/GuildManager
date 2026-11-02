@@ -285,17 +285,19 @@ async function move(perso, group) {
 
 function publish() {
   const full = V.groups.filter(g => g.complete), bad = V.groups.filter(g => !g.complete);
-  if (!full.length) { G.toast('Aucun roster complet à poster.', true); return; }
-  const m = G.modal('<h2 style="margin-top:0">Poster sur Discord ?</h2><p>' + full.length + ' roster' + (full.length > 1 ? 's' : '') + ' complet' + (full.length > 1 ? 's' : '') + ' (' + full.map(g => g.n).join(', ') + ') ' +
-    (full.length > 1 ? 'seront postés' : 'sera posté') + ', un message chacun.</p>' +
-    (bad.length ? '<p>⚠️ Non postés car incomplets : roster ' + bad.map(g => g.n).join(', ') + '. Leurs joueurs iront en réserve.</p>' : '') +
+  if (!full.length && !bad.some(g => g.members.length)) { G.toast('Aucun roster à poster.', true); return; }
+  const m = G.modal('<h2 style="margin-top:0">Poster sur Discord ?</h2>' + (full.length ? '<p>' + full.length + ' roster' + (full.length > 1 ? 's' : '') + ' complet' + (full.length > 1 ? 's' : '') + ' (' + full.map(g => g.n).join(', ') + ') ' +
+    (full.length > 1 ? 'seront postés' : 'sera posté') + ', un message chacun.</p>' : '') +
+    (bad.length ? '<p>⚠️ <b>Rosters incomplets</b> (non postés par défaut, leurs joueurs iront en réserve) :</p>' +
+      bad.map(g => '<label class="small" style="display:flex;gap:8px;align-items:flex-start;margin:6px 0"><input type="checkbox" class="pb-inc" value="' + g.n + '" style="width:auto;margin-top:3px"' + (g.members.length ? '' : ' disabled') + '><span>Poster quand même le <b>roster ' + g.n + '</b> (manque : ' + E(g.missing.join(' · ')) + '). <b>Je confirme le compléter avec des PU.</b></span></label>').join('') : '') +
     (full.some(g => !g.sr) ? '<p>🎯 <b>Pas de lien softres.it</b> pour le roster ' + full.filter(g => !g.sr).map(g => g.n).join(', ') + '. Tu peux poster quand même, mais les joueurs n\'auront pas le lien de réservation.</p>' : '') +
     '<p class="muted small">Un message « Réserve » est aussi posté s\'il reste des joueurs. Chaque joueur en réserve gagne +1 point de bench, et un événement est créé pour chaque roster complet.</p>' +
     '<div class="row"><button class="btn grow" id="pb-no">Annuler</button><button class="btn on grow" id="pb-ok">Poster</button></div>');
   m.querySelector('#pb-no').onclick = G.closeModal;
   m.querySelector('#pb-ok').onclick = async () => {
     m.querySelector('#pb-ok').disabled = true;
-    try { const r = await G.post('planPublish', { id: CUR }); G.closeModal(); applyView(r.view, true); G.toast(r.posted.length + ' roster(s) posté(s) sur Discord' + (r.eventsError ? ' · événements : ' + r.eventsError : ''), !!r.eventsError); }
+    try { const allow = [...m.querySelectorAll('.pb-inc:checked')].map(c => Number(c.value));
+      const r = await G.post('planPublish', { id: CUR, allow }); G.closeModal(); applyView(r.view, true); G.toast(r.posted.length + ' roster(s) posté(s) sur Discord' + (r.eventsError ? ' · événements : ' + r.eventsError : ''), !!r.eventsError); }
     catch (e) { G.closeModal(); G.toast(G.errMsg(e), true); }
   };
 }
