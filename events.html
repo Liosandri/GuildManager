@@ -246,6 +246,7 @@ function paintCompose() {
     '</span><button class="btn on" id="cp-gen">⚙️ ' + (V.groups.length ? 'Régénérer' : 'Générer') + ' les rosters</button></div>' +
     '<div class="row" style="flex-wrap:wrap;margin-top:8px;align-items:center"><label class="small"><input type="checkbox" id="cp-rr"' + (OPT.rerolls ? ' checked' : '') + ' style="width:auto"> Utiliser les rerolls pour compléter</label>' +
     '<label class="small muted">ILVL mini du reroll <input type="number" id="cp-min" min="0" style="width:70px" value="' + E(OPT.min) + '" placeholder="aucun"></label></div>' +
+    (V.flexHint ? '<div class="banner" style="margin-top:10px">' + E(V.flexHint) + '</div>' : '') +
     (EXPLAIN.length ? '<div class="banner" style="margin-top:10px">' + EXPLAIN.map(E).join('<br>') + '</div>' : '') +
     (V.groups.length ? '<p class="muted small" style="margin:8px 0 0">Régénérer remplace tes modifications.</p>' : '') + '</div>' +
     groups + (V.groups.length || V.aside.length ? aside : '') +
