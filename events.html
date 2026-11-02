@@ -179,7 +179,7 @@ const ICON = { tank: '🛡️', soigneur: CROSS, cac: '⚔️', dist: '🏹' };
 const SLOTS = [['tank', ICON.tank, 'Tanks'], ['soigneur', ICON.soigneur, 'Soigneurs'], ['cac', ICON.cac, 'DPS mêlée'], ['dist', ICON.dist, 'DPS distance']];
 const RICON = { tank: ICON.tank, soigneur: ICON.soigneur, dps: ICON.cac };
 const chip = m => '<span class="pill" style="border-color:' + G.classColor(m.classe) + (m.stale ? ';opacity:.6" title="ILVL non mis à jour depuis plus de 2 semaines' : '') + '">' + E(m.perso) + ' <span class="muted">' + (ICON[m.slot] || '') + ' ' + E(m.spe || m.classe) +
-  (m.spe2 && !m.alt ? ' / ' + (ICON[m.slot2] || '') + ' ' + E(m.spe2) : '') + (m.alt ? ' (2e spé)' : '') + (m.ilvl ? ' · ' + E(m.ilvl) : '') + ' · 🪑' + (m.bench || 0) + '</span></span>';
+  (m.spe2 && !m.alt ? ' / ' + (ICON[m.slot2] || '') + ' ' + E(m.spe2) : '') + (m.alt ? ' (2e spé)' : '') + (m.ilvl ? ' · ' + E(m.ilvl) : '') + ' · 🪑' + (m.bench || 0) + (m.stars ? ' · <span style="color:#f5c542">' + '★'.repeat(m.stars) + '</span>' : '') + '</span>' + (m.reroll ? '<span class="tag link soft" title="Reroll de ' + E(m.main) + '">🔁 de ' + E(m.main) + '</span>' : '') + '</span>';
 
 function openCompose(id) {
   CUR = id; sig = '';
@@ -192,7 +192,7 @@ function openCompose(id) {
 }
 
 function closeCompose() {
-  clearInterval(timer); CUR = null; V = null;
+  clearInterval(timer); CUR = null; V = null; EXPLAIN = [];
   document.getElementById('compose').hidden = true; document.getElementById('main').hidden = false; load();
 }
 
@@ -226,9 +226,10 @@ function paintCompose() {
   const cols = SLOTS.map(([k, ic, name]) => '<div class="gl"><span class="gl-h">' + ic + ' ' + name + ' <span class="muted">(' + r[k].length + ')</span></span><div class="pills">' +
     (r[k].length ? r[k].map(m => m.spe2 ? chip(m) + '<button class="btn small" data-alt="' + E(m.perso) + '" data-to="' + (m.alt ? '0' : '1') + '" title="Jouer ce soir avec l\'autre spé">↔</button>' : chip(m)).join('') : '<span class="muted small">—</span>') + '</div></div>').join('');
   const groups = V.groups.map(g =>
-    '<div class="card"><div class="row"><b class="grow">Roster ' + g.n + '</b>' +
+    '<div class="card"><div class="row"><b class="grow">Roster ' + g.n + '</b>' + (V.waves ? '<span class="tag">🌊 Vague ' + g.wave + '</span>' : '') +
     (g.complete ? '<span class="tag">✅ complet</span>' : '<span class="tag" style="color:#ffb4a8">⚠️ ' + E(g.missing.join(' · ')) + '</span>') + '</div>' +
-    '<div class="muted small">' + g.tanks + ' tank · ' + g.heals + ' soigneur · ' + g.cac + ' mêlée · ' + g.dist + ' distance' + (g.avg ? ' · ILVL moyen <b>' + g.avg + '</b>' : '') + '</div>' +
+    '<div class="muted small">' + g.tanks + ' tank · ' + g.heals + ' soigneur · ' + g.cac + ' mêlée · ' + g.dist + ' distance' + (g.avg ? ' · ILVL moyen <b>' + g.avg + '</b>' : '') + (g.avgStars ? ' · <span style="color:#f5c542">★ ' + g.avgStars + '</span>' : '') + (g.rerolls ? ' · 🔁 ' + g.rerolls + ' reroll' + (g.rerolls > 1 ? 's' : '') : '') + '</div>' +
+    (g.warnings && g.warnings.length ? '<div class="small" style="color:#ffb4a8;margin-top:4px">⚠️ ' + E(g.warnings.join(' · ')) + '</div>' : '') +
     '<div class="row" style="margin-top:8px;flex-wrap:wrap"><input class="grow" style="min-width:200px" data-sr="' + g.n + '" value="' + E(g.sr || '') + '" placeholder="Lien softres.it du raid (facultatif)" autocomplete="off"><button class="btn small" data-srsave="' + g.n + '">🎯 Enregistrer</button></div>' +
     g.members.map(m => memberRow(m, g.n)).join('') + '</div>').join('');
   const aside = '<div class="card"><b>🪑 Réserve</b> <span class="muted small">(' + V.aside.length + ')</span>' +
@@ -243,6 +244,9 @@ function paintCompose() {
     '<div class="card" style="margin-top:12px"><div class="row" style="flex-wrap:wrap"><span class="grow muted small">' +
     (V.possible ? 'Avec les inscrits actuels, on peut faire <b>' + V.possible + '</b> roster' + (V.possible > 1 ? 's' : '') + ' complet' + (V.possible > 1 ? 's' : '') + '.' : 'Pas assez d\'inscrits pour un roster complet.') +
     '</span><button class="btn on" id="cp-gen">⚙️ ' + (V.groups.length ? 'Régénérer' : 'Générer') + ' les rosters</button></div>' +
+    '<div class="row" style="flex-wrap:wrap;margin-top:8px;align-items:center"><label class="small"><input type="checkbox" id="cp-rr"' + (OPT.rerolls ? ' checked' : '') + ' style="width:auto"> Utiliser les rerolls pour compléter</label>' +
+    '<label class="small muted">ILVL mini du reroll <input type="number" id="cp-min" min="0" style="width:70px" value="' + E(OPT.min) + '" placeholder="aucun"></label></div>' +
+    (EXPLAIN.length ? '<div class="banner" style="margin-top:10px">' + EXPLAIN.map(E).join('<br>') + '</div>' : '') +
     (V.groups.length ? '<p class="muted small" style="margin:8px 0 0">Régénérer remplace tes modifications.</p>' : '') + '</div>' +
     groups + (V.groups.length || V.aside.length ? aside : '') +
     (V.groups.length ? '<button class="btn on" id="cp-pub" style="width:100%;margin-top:14px">✅ Valider et poster sur Discord (' + full + ' roster' + (full > 1 ? 's' : '') + ')</button>' +
@@ -263,9 +267,11 @@ async function saveSr(n) {
   try { applyView(await G.post('planSetSr', { id: CUR, group: Number(n), url }), true); G.toast(url.trim() ? 'Lien enregistré' : 'Lien retiré'); } catch (e) { G.toast(G.errMsg(e), true); }
 }
 
+let EXPLAIN = []; const OPT = { rerolls: true, min: '' };
 async function generate() {
   if (V.groups.length && !confirm('Régénérer remplace les modifications faites à la main. Continuer ?')) return;
-  try { applyView(await G.post('planGenerate', { id: CUR }), true); G.toast('Rosters générés'); } catch (e) { G.toast(G.errMsg(e), true); }
+  OPT.rerolls = document.getElementById('cp-rr').checked; OPT.min = document.getElementById('cp-min').value;
+  try { const v = await G.post('planGenerate', { id: CUR, rerolls: OPT.rerolls, minIlvl: OPT.min }); EXPLAIN = v.explain || []; applyView(v, true); G.toast('Rosters générés'); } catch (e) { G.toast(G.errMsg(e), true); }
 }
 
 async function setAlt(perso, alt) {
