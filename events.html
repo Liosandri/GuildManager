@@ -52,13 +52,14 @@ document.getElementById('pl-go').onclick = create;
 function pills(list) { return list.length ? '<div class="pills">' + list.map(n => '<span class="pill">' + E(n) + '</span>').join('') + '</div>' : '<span class="muted small">—</span>'; }
 
 function tySummary() {
-  return COMPOS.map(c => '<b>' + c.format + '</b> : ' + c.tanks + ' tank' + (c.tanks > 1 ? 's' : '') + ', ' + c.heals + ' soigneur' + (c.heals > 1 ? 's' : '') + ', ' + c.dps + ' DPS').join('<br>');
+  return COMPOS.map(c => '<b>' + c.format + '</b> : ' + c.tanks + ' tank' + (c.tanks > 1 ? 's' : '') + ', ' + c.heals + ' soigneur' + (c.heals > 1 ? 's' : '') + ', ' + c.dps + ' DPS · ' + c.rerolls + ' reroll' + (c.rerolls > 1 ? 's' : '') + ' max').join('<br>');
 }
 function tyRow(c) {
   return '<div class="row ty-row" style="margin-top:8px;flex-wrap:wrap;align-items:center">' +
     '<label class="small muted">Raid de <input type="number" class="ty-f" min="2" max="40" style="width:70px" value="' + c.format + '"></label>' +
     '<label class="small muted">Tanks <input type="number" class="ty-t" min="0" style="width:64px" value="' + c.tanks + '"></label>' +
     '<label class="small muted">Soigneurs <input type="number" class="ty-h" min="0" style="width:64px" value="' + c.heals + '"></label>' +
+    '<label class="small muted" title="Nombre maximum de rerolls utilisables dans un même roster">Rerolls max <input type="number" class="ty-r" min="0" style="width:64px" value="' + c.rerolls + '"></label>' +
     '<span class="small ty-d grow"></span><button class="btn small ty-x" title="Retirer" aria-label="Retirer">🗑</button></div>';
 }
 function tyRefresh() {
@@ -71,14 +72,14 @@ function tyRefresh() {
 function tyOpen() {
   const box = document.getElementById('ty-edit');
   box.hidden = false; document.getElementById('ty-sum').hidden = true; document.getElementById('ty-toggle').hidden = true;
-  box.innerHTML = '<p class="muted small" style="margin:8px 0 0">Un roster est complet quand il atteint la taille du raid avec au moins ce nombre de tanks et de soigneurs. Le reste est du DPS. Tu peux ajouter n\'importe quel format (ex. 25).</p><div id="ty-rows">' + COMPOS.map(tyRow).join('') + '</div>' +
+  box.innerHTML = '<p class="muted small" style="margin:8px 0 0">Un roster est complet quand il atteint la taille du raid avec au moins ce nombre de tanks et de soigneurs. Le reste est du DPS. « Rerolls max » = combien de rerolls l\'app peut mettre dans un même roster pour le compléter. Tu peux ajouter n\'importe quel format (ex. 25).</p><div id="ty-rows">' + COMPOS.map(tyRow).join('') + '</div>' +
     '<div class="row" style="margin-top:12px"><button class="btn small" id="ty-add">＋ Ajouter un format</button><span class="grow"></span><button class="btn small" id="ty-no">Annuler</button><button class="btn on small" id="ty-ok">Enregistrer</button></div>';
   const wire = () => { box.querySelectorAll('input').forEach(i => i.oninput = tyRefresh); box.querySelectorAll('.ty-x').forEach(b => b.onclick = () => { b.closest('.ty-row').remove(); }); tyRefresh(); };
   wire();
-  document.getElementById('ty-add').onclick = () => { document.getElementById('ty-rows').insertAdjacentHTML('beforeend', tyRow({ format: '', tanks: 1, heals: 2 })); wire(); };
+  document.getElementById('ty-add').onclick = () => { document.getElementById('ty-rows').insertAdjacentHTML('beforeend', tyRow({ format: '', tanks: 1, heals: 2, rerolls: 1 })); wire(); };
   document.getElementById('ty-no').onclick = tyClose;
   document.getElementById('ty-ok').onclick = async () => {
-    const rows = [...box.querySelectorAll('.ty-row')].map(r => ({ format: r.querySelector('.ty-f').value, tanks: r.querySelector('.ty-t').value, heals: r.querySelector('.ty-h').value }));
+    const rows = [...box.querySelectorAll('.ty-row')].map(r => ({ format: r.querySelector('.ty-f').value, tanks: r.querySelector('.ty-t').value, heals: r.querySelector('.ty-h').value, rerolls: r.querySelector('.ty-r').value }));
     const btn = document.getElementById('ty-ok'); btn.disabled = true;
     try { const r = await G.post('compoSave', { rows }); COMPOS = r.compos; tyClose(); paint(); G.toast('Typologie enregistrée'); }
     catch (e) { G.toast(G.errMsg(e), true); btn.disabled = false; }

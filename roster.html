@@ -50,6 +50,13 @@ function chips() {
 }
 
 const benchOf = m => { const v = pub && pub.bench ? pub.bench[G.norm(m.pseudo)] : undefined; return v === undefined ? null : v; };
+const starsOf = m => (pub && pub.stars && pub.stars[G.norm(m.pseudo)]) || 0;
+function starsHtml(m) {
+  if (!G.isOfficer() || !m.pseudo) return '';
+  const n = starsOf(m);
+  return '<div class="mc-stars" title="Niveau (visible des officiers seulement)" style="margin-top:4px;letter-spacing:2px;cursor:pointer">' +
+    [1, 2, 3, 4, 5].map(i => '<span data-star="' + i + '" data-p="' + E(m.pseudo) + '" style="color:' + (i <= n ? '#f5c542' : '#52618a') + '">' + (i <= n ? '★' : '☆') + '</span>').join('') + '</div>';
+}
 const kidsOf = key => (pub ? pub.members : []).filter(x => x.type === 'reroll' && x.main === key);
 function card(m) {
   const os = m.spe2 ? 'OS : ' + m.spe2 + (m.role2 ? ' ' + G.ROLE[m.role2].emoji : '') : '';
@@ -61,7 +68,7 @@ function card(m) {
   return '<div class="mcard" style="--c:' + c + '"><div class="mc-head"><b class="mc-name">' + E(m.key) + '</b>' +
     (G.isOfficer() ? '<button class="btn small" data-edit="' + E(m.key) + '" aria-label="Modifier">✎</button>' : '') + '</div>' +
     '<div class="mc-spec" style="color:' + c + '">' + E([m.classe, m.spe].filter(Boolean).join(' · ')) + (m.ilvl ? ' · ILVL ' + E(m.ilvl) : '') + (benchOf(m) !== null ? ' · 🪑 ' + benchOf(m) : '') + ' ' + (G.ROLE[m.role] ? G.ROLE[m.role].emoji : '') + '</div>' +
-    (meta ? '<div class="mc-meta">' + meta + '</div>' : '') +
+    (meta ? '<div class="mc-meta">' + meta + '</div>' : '') + starsHtml(m) +
     (chips ? '<div class="mc-chips">' + chips + '</div>' : '') + '</div>';
 }
 
@@ -88,6 +95,11 @@ function paint() {
   list.innerHTML = secs.filter(s => s[1].length).map(s => '<div class="sec"><span>' + E(s[0]) + '</span><span class="muted">' + s[1].length + '</span></div><div class="grid">' + s[1].map(card).join('') + '</div>').join('') ||
     '<div class="empty">' + (all.length ? 'Aucun résultat.' : 'Le roster est vide. Ajoute le premier membre avec « ＋ Nouveau membre ».') + '</div>';
   list.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => memberForm(b.dataset.edit));
+  list.querySelectorAll('[data-star]').forEach(b => b.onclick = async () => {
+    const p = b.dataset.p, i = Number(b.dataset.star), cur = (pub.stars || {})[G.norm(p)] || 0, v = cur === i ? 0 : i;
+    pub.stars = pub.stars || {}; if (v) pub.stars[G.norm(p)] = v; else delete pub.stars[G.norm(p)]; paint();
+    try { await G.post('levelSet', { pseudo: p, stars: v }); } catch (e) { G.toast(G.errMsg(e), true); pub.stars[G.norm(p)] = cur; paint(); }
+  });
 }
 
 /* ---------- formulaire membre ---------- */
